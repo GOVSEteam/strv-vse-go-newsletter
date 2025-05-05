@@ -1,0 +1,49 @@
+# Go build outputs
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/bin
+/pkg
+/vendor # If you ever decide to vendor dependencies
+
+# Go environment files
+/go.work # Go workspaces (usually project-specific)
+
+# IDE files & directories
+.idea/
+.vscode/
+*.swp
+*~
+*.bak
+
+# OS generated files
+.DS_Store
+ehthumbs.db
+Thumbs.db
+
+# Log files
+*.log
+
+# Configuration files containing secrets (add specific names if needed)
+.env
+configs/*.env
+configs/*.yml
+configs/*.yaml
+!configs/*.example # Important: Keep example files versioned
+
+# Dependency directories (though Go modules usually handles this)
+# vendor/
+
+# Coverage reports
+coverage.txt
+coverage.out
+coverage.html
+
+# Docker ignore can handle build context, but sometimes useful here too
+docker-compose.override.yml
+
+# Add any other sensitive files or build artifacts specific to your tools
