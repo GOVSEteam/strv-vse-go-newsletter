@@ -21,7 +21,7 @@ This service provides the API endpoints for:
 
 ## Prerequisites
 
-- [Go](https://golang.org/doc/install) (version 1.21 or later recommended)
+- [Go](https://golang.org/doc/install) (version 1.21 or later)
 - [Docker](https://docs.docker.com/get-docker/) & [Docker Compose](https://docs.docker.com/compose/install/)
 - (Optional) [Task](https://taskfile.dev/installation/) or Make for running scripts
 
