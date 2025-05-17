@@ -5,8 +5,8 @@ import (
 )
 
 type NewsletterServiceInterface interface {
-	ListNewsletters() ([]string, error)
-	CreateNewsletter(name string) error
+	ListNewsletters() ([]repository.Newsletter, error)
+	CreateNewsletter(editorID, name, description string) (*repository.Newsletter, error)
 }
 
 type newsletterService struct {
@@ -17,10 +17,10 @@ func NewsletterService(repo repository.NewsletterRepository) NewsletterServiceIn
 	return &newsletterService{repo: repo}
 }
 
-func (s *newsletterService) ListNewsletters() ([]string, error) {
+func (s *newsletterService) ListNewsletters() ([]repository.Newsletter, error) {
 	return s.repo.ListNewsletters()
 }
 
-func (s *newsletterService) CreateNewsletter(name string) error {
-	return s.repo.CreateNewsletter(name)
+func (s *newsletterService) CreateNewsletter(editorID, name, description string) (*repository.Newsletter, error) {
+	return s.repo.CreateNewsletter(editorID, name, description)
 }
