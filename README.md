@@ -101,8 +101,9 @@ The project follows a layered architecture pattern, which separates concerns and
 - `internal/layers/handler/` — HTTP handlers: handle HTTP requests, parse input, and return responses
 - `internal/layers/service/` — Business logic: implements core application logic and orchestrates repositories
 - `internal/layers/repository/` — Data access: manages data storage and retrieval (e.g., in-memory, database)
-- `internal/domain/` — Domain models and entities for the application's core business objects
 - `internal/db/` — Database connection
+- `internal/firebase-auth/` — Firebase Admin SDK initialization and utilities
+- `tables/` — SQL table definitions for reference and for AI code assistants
 
 ## Deployment
 App is running on https://railway.com/. The production URL is:

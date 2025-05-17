@@ -16,6 +16,9 @@ func Router() http.Handler {
 	newsletterRepo := repository.NewsletterRepo(db)
 	newsletterService := service.NewsletterService(newsletterRepo)
 
+	editorRepo := repository.EditorRepo(db)
+	editorService := service.NewEditorService(editorRepo)
+
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))
@@ -24,6 +27,8 @@ func Router() http.Handler {
 	mux.HandleFunc("/api/newsletters", func(w http.ResponseWriter, r *http.Request) {
 		handler.NewslettersHandler(w, r, newsletterService)
 	})
+
+	mux.HandleFunc("/signup", handler.EditorSignUpHandler(editorService))
 
 	return mux
 }
