@@ -1,6 +1,8 @@
 package service
 
-import "github.com/GOVSEteam/strv-vse-go-newsletter/internal/repository"
+import (
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
+)
 
 type NewsletterService interface {
 	ListNewsletters() ([]string, error)

@@ -1,8 +1,8 @@
-package handlers
+package handler
 
 import (
 	"encoding/json"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/service"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
 	"net/http"
 )
 

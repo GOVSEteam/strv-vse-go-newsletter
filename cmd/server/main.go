@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	http2 "github.com/GOVSEteam/strv-vse-go-newsletter/internal/transport/http"
+	http2 "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/router"
 	"log"
 	"net/http"
 )

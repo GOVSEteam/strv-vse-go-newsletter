@@ -1,9 +1,9 @@
-package http
+package router
 
 import (
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/repository"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/service"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/transport/http/handlers"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
 	"net/http"
 )
 
@@ -19,7 +19,7 @@ func NewRouter() http.Handler {
 	})
 
 	mux.HandleFunc("/api/newsletters", func(w http.ResponseWriter, r *http.Request) {
-		handlers.NewslettersHandler(w, r, newsletterService)
+		handler.NewslettersHandler(w, r, newsletterService)
 	})
 
 	return mux

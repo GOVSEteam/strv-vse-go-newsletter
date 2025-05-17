@@ -94,3 +94,11 @@ The project follows a layered architecture pattern, which separates concerns and
 - **Handlers**: Handle HTTP requests, parse input/output, and call services.
 - **Service**: Contains business logic, orchestrates repositories.
 - **Repository**: Handles data persistence.
+
+## Project Structure
+- `cmd/` — Application entry points (e.g., main.go for starting the server)
+- `internal/layers/router/` — HTTP router setup: configures routes and wires handlers to endpoints
+- `internal/layers/handler/` — HTTP handlers: handle HTTP requests, parse input, and return responses
+- `internal/layers/service/` — Business logic: implements core application logic and orchestrates repositories
+- `internal/layers/repository/` — Data access: manages data storage and retrieval (e.g., in-memory, database)
+- `internal/domain/` — Domain models and entities for the application's core business objects
