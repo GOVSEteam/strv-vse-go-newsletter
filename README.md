@@ -76,3 +76,15 @@ This service provides the API endpoints for:
 # TODO: Add test command
 go test ./... -v -race -cover
 ```
+
+## Commit Conventions
+- **Feature**: A new feature or enhancement to existing functionality.
+- **Bugfix**: A bug fix or patch to existing functionality.
+- **Refactor**: Code refactoring or cleanup without changing functionality.
+
+## Branch naming rules
+Commiting into main branch is not allowed. Changes should be made in separate branches and merged via pull requests.
+- **Feature branches**: `feature/<description>` (e.g., `feature/user-auth`)
+- **Bugfix branches**: `bugfix/<description>` (e.g., `bugfix/fix-login-issue`)
+- **Refactor branches**: `refactor/<description>` (e.g., `refactor/code-cleanup`)
+
