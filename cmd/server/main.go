@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	_ = godotenv.Load()
+	_ = godotenv.Load("config/.env")
 	fmt.Println("Starting App on port 8080...")
 
 	router := http2.Router()
