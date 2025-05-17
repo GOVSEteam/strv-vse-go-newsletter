@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-func NewslettersHandler(w http.ResponseWriter, r *http.Request, svc service.NewsletterService) {
+func NewslettersHandler(w http.ResponseWriter, r *http.Request, svc service.NewsletterServiceInterface) {
 	switch r.Method {
 	case http.MethodGet:
 		list, err := svc.ListNewsletters()

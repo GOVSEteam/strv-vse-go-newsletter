@@ -4,7 +4,7 @@ import (
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 )
 
-type NewsletterService interface {
+type NewsletterServiceInterface interface {
 	ListNewsletters() ([]string, error)
 	CreateNewsletter(name string) error
 }
@@ -13,7 +13,7 @@ type newsletterService struct {
 	repo repository.NewsletterRepository
 }
 
-func NewNewsletterService(repo repository.NewsletterRepository) NewsletterService {
+func NewsletterService(repo repository.NewsletterRepository) NewsletterServiceInterface {
 	return &newsletterService{repo: repo}
 }
 
