@@ -104,7 +104,7 @@ The project follows a layered architecture pattern, which separates concerns and
 - `internal/domain/` — Domain models and entities for the application's core business objects
 
 ## Deployment
-App is running on https://railway.com/. The production URL is:
+App is running on https://railway.com/ with automatic deployment on commit to main branch. The production URL is:
 
 `strv-vse-go-newsletter-production.up.railway.app`
 
