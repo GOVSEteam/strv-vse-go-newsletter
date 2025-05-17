@@ -36,7 +36,7 @@ configs/*.yaml
 !configs/*.example # Important: Keep example files versioned
 
 # Ignore config secrets
-/config/.env
+/.env
 /config/serviceAccountKey.json
 
 # Dependency directories (though Go modules usually handles this)
