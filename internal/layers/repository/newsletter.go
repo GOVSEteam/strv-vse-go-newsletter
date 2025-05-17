@@ -5,9 +5,17 @@ import (
 	_ "github.com/lib/pq"
 )
 
+type Newsletter struct {
+	ID          string
+	EditorID    string
+	Name        string
+	Description string
+	CreatedAt   string
+}
+
 type NewsletterRepository interface {
-	ListNewsletters() ([]string, error)
-	CreateNewsletter(name string) error
+	ListNewsletters() ([]Newsletter, error)
+	CreateNewsletter(editorID, name, description string) (*Newsletter, error)
 }
 
 type PostgresNewsletterRepo struct {
@@ -18,25 +26,29 @@ func NewsletterRepo(db *sql.DB) NewsletterRepository {
 	return &PostgresNewsletterRepo{db: db}
 }
 
-func (r *PostgresNewsletterRepo) ListNewsletters() ([]string, error) {
-	rows, err := r.db.Query("SELECT name FROM newsletters ORDER BY id")
+func (r *PostgresNewsletterRepo) ListNewsletters() ([]Newsletter, error) {
+	rows, err := r.db.Query("SELECT id, editor_id, name, description, created_at FROM newsletters ORDER BY created_at DESC")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var newsletters []string
+	var newsletters []Newsletter
 	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
+		var n Newsletter
+		if err := rows.Scan(&n.ID, &n.EditorID, &n.Name, &n.Description, &n.CreatedAt); err != nil {
 			return nil, err
 		}
-		newsletters = append(newsletters, name)
+		newsletters = append(newsletters, n)
 	}
 	return newsletters, rows.Err()
 }
 
-func (r *PostgresNewsletterRepo) CreateNewsletter(name string) error {
-	_, err := r.db.Exec("INSERT INTO newsletters (name) VALUES ($1)", name)
-	return err
+func (r *PostgresNewsletterRepo) CreateNewsletter(editorID, name, description string) (*Newsletter, error) {
+	row := r.db.QueryRow(`INSERT INTO newsletters (editor_id, name, description) VALUES ($1, $2, $3) RETURNING id, editor_id, name, description, created_at`, editorID, name, description)
+	var n Newsletter
+	if err := row.Scan(&n.ID, &n.EditorID, &n.Name, &n.Description, &n.CreatedAt); err != nil {
+		return nil, err
+	}
+	return &n, nil
 }

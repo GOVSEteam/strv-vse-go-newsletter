@@ -26,7 +26,7 @@ func Router() http.Handler {
 	})
 
 	mux.HandleFunc("/api/newsletters", func(w http.ResponseWriter, r *http.Request) {
-		handler.NewslettersHandler(w, r, newsletterService)
+		handler.NewslettersHandler(w, r, newsletterService, editorRepo)
 	})
 
 	mux.HandleFunc("/signup", editor.EditorSignUpHandler(editorService))
