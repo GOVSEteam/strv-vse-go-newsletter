@@ -88,3 +88,9 @@ Commiting into main branch is not allowed. Changes should be made in separate br
 - **Bugfix branches**: `bugfix/<description>` (e.g., `bugfix/fix-login-issue`)
 - **Refactor branches**: `refactor/<description>` (e.g., `refactor/code-cleanup`)
 
+## Layered Architecture
+The project follows a layered architecture pattern, which separates concerns and promotes maintainability. The main layers are:
+- **Router**: Handles HTTP routing and delegates to handlers.
+- **Handlers**: Handle HTTP requests, parse input/output, and call services.
+- **Service**: Contains business logic, orchestrates repositories.
+- **Repository**: Handles data persistence.
