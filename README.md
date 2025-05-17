@@ -88,3 +88,17 @@ Commiting into main branch is not allowed. Changes should be made in separate br
 - **Bugfix branches**: `bugfix/<description>` (e.g., `bugfix/fix-login-issue`)
 - **Refactor branches**: `refactor/<description>` (e.g., `refactor/code-cleanup`)
 
+## Layered Architecture
+The project follows a layered architecture pattern, which separates concerns and promotes maintainability. The main layers are:
+- **Router**: Handles HTTP routing and delegates to handlers.
+- **Handlers**: Handle HTTP requests, parse input/output, and call services.
+- **Service**: Contains business logic, orchestrates repositories.
+- **Repository**: Handles data persistence.
+
+## Project Structure
+- `cmd/` — Application entry points (e.g., main.go for starting the server)
+- `internal/layers/router/` — HTTP router setup: configures routes and wires handlers to endpoints
+- `internal/layers/handler/` — HTTP handlers: handle HTTP requests, parse input, and return responses
+- `internal/layers/service/` — Business logic: implements core application logic and orchestrates repositories
+- `internal/layers/repository/` — Data access: manages data storage and retrieval (e.g., in-memory, database)
+- `internal/domain/` — Domain models and entities for the application's core business objects
