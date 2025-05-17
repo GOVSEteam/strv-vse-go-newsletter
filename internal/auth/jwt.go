@@ -1,9 +1,9 @@
-package authutil
+package auth
 
 import (
 	"context"
 	"errors"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/firebase-auth"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/setup-firebase"
 	"net/http"
 	"strings"
 )
@@ -27,7 +27,7 @@ func VerifyFirebaseJWT(r *http.Request) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	client := firebase_auth.GetAuthClient()
+	client := setup_firebase.GetAuthClient()
 	decoded, err := client.VerifyIDToken(context.Background(), token)
 	if err != nil {
 		return "", err

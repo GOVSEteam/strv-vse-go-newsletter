@@ -11,13 +11,6 @@ type signInRequest struct {
 	Password string `json:"password"`
 }
 
-type signInResponse struct {
-	IDToken      string `json:"idToken"`
-	RefreshToken string `json:"refreshToken"`
-	Email        string `json:"email"`
-	LocalID      string `json:"localId"`
-}
-
 func EditorSignInHandler(svc service.EditorService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
