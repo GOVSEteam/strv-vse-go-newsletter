@@ -102,3 +102,16 @@ The project follows a layered architecture pattern, which separates concerns and
 - `internal/layers/service/` — Business logic: implements core application logic and orchestrates repositories
 - `internal/layers/repository/` — Data access: manages data storage and retrieval (e.g., in-memory, database)
 - `internal/domain/` — Domain models and entities for the application's core business objects
+
+## Deployment
+App is running on https://railway.com/. The production URL is:
+
+`strv-vse-go-newsletter-production.up.railway.app`
+
+You can test if the APP is running by this powershell command:
+
+```powershell
+Invoke-WebRequest -Uri https://strv-vse-go-newsletter-production.up.railway.app/healthz -Method GET
+```
+
+Or by opening the URL in your browser.
