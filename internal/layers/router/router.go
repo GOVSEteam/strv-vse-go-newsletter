@@ -3,6 +3,7 @@ package router
 import (
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/db"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/editor"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
 	"net/http"
@@ -28,7 +29,8 @@ func Router() http.Handler {
 		handler.NewslettersHandler(w, r, newsletterService)
 	})
 
-	mux.HandleFunc("/signup", handler.EditorSignUpHandler(editorService))
+	mux.HandleFunc("/signup", editor.EditorSignUpHandler(editorService))
+	mux.HandleFunc("/signin", editor.EditorSignInHandler(editorService))
 
 	return mux
 }
