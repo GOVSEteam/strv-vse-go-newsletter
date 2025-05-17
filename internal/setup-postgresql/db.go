@@ -1,4 +1,4 @@
-package db
+package setup_postgresql
 
 import (
 	"database/sql"

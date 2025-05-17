@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"firebase.google.com/go/v4/auth"
 	"fmt"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/firebase-auth"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/setup-firebase"
 	"net/http"
 	"os"
 )
@@ -33,7 +33,7 @@ func NewEditorService(repo repository.EditorRepository) EditorService {
 }
 
 func (s *editorService) SignUp(email, password string) (*repository.Editor, error) {
-	client := firebase_auth.GetAuthClient()
+	client := setup_firebase.GetAuthClient()
 	params := (&auth.UserToCreate{}).Email(email).Password(password)
 	user, err := client.CreateUser(context.Background(), params)
 	if err != nil {
@@ -62,7 +62,7 @@ func (s *editorService) SignIn(email, password string) (*SignInResponse, error) 
 	if resp.StatusCode != http.StatusOK {
 		var errResp map[string]interface{}
 		_ = json.NewDecoder(resp.Body).Decode(&errResp)
-		return nil, fmt.Errorf("firebase sign-in failed: %v", errResp)
+		return nil, fmt.Errorf("auth sign-in failed: %v", errResp)
 	}
 	var out SignInResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {

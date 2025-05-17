@@ -2,7 +2,7 @@ package handler
 
 import (
 	"encoding/json"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/authutil"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/auth"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
 	"net/http"
@@ -20,7 +20,7 @@ func NewslettersHandler(w http.ResponseWriter, r *http.Request, svc service.News
 		json.NewEncoder(w).Encode(list)
 	case http.MethodPost:
 		// Require JWT
-		firebaseUID, err := authutil.VerifyFirebaseJWT(r)
+		firebaseUID, err := auth.VerifyFirebaseJWT(r)
 		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			json.NewEncoder(w).Encode(map[string]string{"error": "invalid or missing token"})
