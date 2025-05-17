@@ -3,14 +3,16 @@ package main
 import (
 	"fmt"
 	http2 "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/router"
+	"github.com/joho/godotenv"
 	"log"
 	"net/http"
 )
 
 func main() {
-	fmt.Println("Starting Newsletter Service...")
+	_ = godotenv.Load()
+	fmt.Println("Starting App on port 8080...")
 
-	router := http2.NewRouter()
+	router := http2.Router()
 
 	addr := ":8080"
 	fmt.Printf("Server listening on %s\n", addr)

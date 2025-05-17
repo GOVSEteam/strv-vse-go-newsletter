@@ -102,6 +102,7 @@ The project follows a layered architecture pattern, which separates concerns and
 - `internal/layers/service/` — Business logic: implements core application logic and orchestrates repositories
 - `internal/layers/repository/` — Data access: manages data storage and retrieval (e.g., in-memory, database)
 - `internal/domain/` — Domain models and entities for the application's core business objects
+- `internal/db/` — Database connection
 
 ## Deployment
 App is running on https://railway.com/. The production URL is:
@@ -115,3 +116,8 @@ Invoke-WebRequest -Uri https://strv-vse-go-newsletter-production.up.railway.app/
 ```
 
 Or by opening the URL in your browser.
+
+## Database
+The application uses **PostgreSQL** as the primary database for storing data. The database connection details are specified in the `.env` file.
+
+Given the size of the project and number of tables, automatic migrations are not implemented. If you want to change database, connect to railway and modify the database schema manually.

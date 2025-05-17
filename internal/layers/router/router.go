@@ -1,17 +1,20 @@
 package router
 
 import (
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/db"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
 	"net/http"
 )
 
-func NewRouter() http.Handler {
+func Router() http.Handler {
 	mux := http.NewServeMux()
 
-	newsletterRepo := repository.NewInMemoryNewsletterRepo()
-	newsletterService := service.NewNewsletterService(newsletterRepo)
+	db := db.ConnectDB()
+
+	newsletterRepo := repository.NewsletterRepo(db)
+	newsletterService := service.NewsletterService(newsletterRepo)
 
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
