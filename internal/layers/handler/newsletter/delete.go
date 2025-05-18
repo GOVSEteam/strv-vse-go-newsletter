@@ -36,7 +36,7 @@ func DeleteHandler(svc service.NewsletterServiceInterface, editorRepo repository
 			return
 		}
 
-		err = svc.DeleteNewsletter(newsletterID, editor.ID)
+		err = svc.DeleteNewsletter(r.Context(), newsletterID, editor.ID)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				commonHandler.JSONError(w, "Newsletter not found or you don't have permission to delete it", http.StatusNotFound) // Or StatusForbidden
@@ -49,4 +49,4 @@ func DeleteHandler(svc service.NewsletterServiceInterface, editorRepo repository
 
 		w.WriteHeader(http.StatusNoContent) // Success, no body
 	}
-} 
+}

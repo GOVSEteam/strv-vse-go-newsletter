@@ -14,35 +14,34 @@ import (
 
 // ErrAlreadySubscribed is returned when a user tries to subscribe to a newsletter they are already subscribed to.
 var ErrAlreadySubscribed = errors.New("email is already subscribed to this newsletter")
-
 // ErrNewsletterNotFound is returned when a subscription attempt is made for a non-existent newsletter.
 var ErrNewsletterNotFound = errors.New("newsletter not found")
-
 // ErrSubscriptionNotFound is returned when an attempt to modify a subscription fails because it doesn't exist.
 var ErrSubscriptionNotFound = errors.New("subscription not found for the given email and newsletter ID")
-
 // ErrInvalidOrExpiredToken is returned when a confirmation token is invalid, not found, or expired.
 var ErrInvalidOrExpiredToken = errors.New("confirmation token is invalid or expired")
-
 // ErrAlreadyConfirmed is returned when a subscription is already confirmed.
 var ErrAlreadyConfirmed = errors.New("subscription is already confirmed")
 
+type SubscriberServiceInterface interface {
+	SubscribeToNewsletter(ctx context.Context, req SubscribeToNewsletterRequest) (*SubscribeToNewsletterResponse, error)
+	UnsubscribeFromNewsletter(ctx context.Context, req UnsubscribeFromNewsletterRequest) error
+	ConfirmSubscription(ctx context.Context, req ConfirmSubscriptionRequest) error
+}
+
 // SubscriberService handles business logic for subscriber management.
-// Placeholder for now.
 type SubscriberService struct {
 	subscriberRepo repository.SubscriberRepository
-	newsletterRepo repository.NewsletterRepository // Added newsletter repository dependency
-	emailService   email.EmailService              // Added EmailService dependency
-	// We might add other dependencies like an EmailService later
+	newsletterRepo repository.NewsletterRepository
+	emailService   email.EmailService
 }
 
 // NewSubscriberService creates a new SubscriberService.
-// Placeholder for now.
-func NewSubscriberService(subRepo repository.SubscriberRepository, newsRepo repository.NewsletterRepository, emailSvc email.EmailService) *SubscriberService {
+func NewSubscriberService(subRepo repository.SubscriberRepository, newsRepo repository.NewsletterRepository, emailSvc email.EmailService) SubscriberServiceInterface { // Return interface
 	return &SubscriberService{
 		subscriberRepo: subRepo,
-		newsletterRepo: newsRepo, // Store dependency
-		emailService:   emailSvc, // Store EmailService dependency
+		newsletterRepo: newsRepo,
+		emailService:   emailSvc,
 	}
 }
 
@@ -54,9 +53,9 @@ type SubscribeToNewsletterRequest struct {
 
 // SubscribeToNewsletterResponse defines the output after a successful subscription.
 type SubscribeToNewsletterResponse struct {
-	SubscriberID string                  `json:"subscriber_id"`
-	Email        string                  `json:"email"`
-	NewsletterID string                  `json:"newsletter_id"`
+	SubscriberID string `json:"subscriber_id"`
+	Email        string `json:"email"`
+	NewsletterID string `json:"newsletter_id"`
 	Status       models.SubscriberStatus `json:"status"`
 }
 

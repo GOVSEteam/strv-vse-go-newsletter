@@ -11,12 +11,12 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/joho/godotenv"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/auth"
 	h "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/newsletter"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 	rtr "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/router" // Alias for router package
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/setup-postgresql"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/setup"             // Corrected import path
+	"github.com/joho/godotenv"
 	_ "github.com/lib/pq" // PostgreSQL driver
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -90,14 +90,14 @@ func TestMain(m *testing.M) {
 	// Setup: Database connection
 	// originalDbURL := os.Getenv("DATABASE_URL") // REMOVED
 	// os.Setenv("DATABASE_URL", testDatabaseURL) // REMOVED
-	// testDB = setup_postgresql.ConnectDB() // Uses our test DSN // MODIFIED BELOW
+	// testDB = setup.ConnectDB() // Uses our test DSN // MODIFIED BELOW
 	// os.Setenv("DATABASE_URL", originalDbURL) // Restore original DSN // REMOVED
 
 	// testDB will be initialized using the DATABASE_URL from the environment,
-	// which should be loaded from the .env file by setup_postgresql.ConnectDB() or by the execution environment.
-	testDB = setup_postgresql.ConnectDB()
+	// which should be loaded from the .env file by setup.ConnectDB() or by the execution environment.
+	testDB = setup.ConnectDB()
 	if testDB == nil {
-		// The setup_postgresql.ConnectDB() should ideally handle errors,
+		// The setup.ConnectDB() should ideally handle errors,
 		// but we add a check here for robustness in the test context.
 		// If using Go 1.21+, you might use log.Fatalf directly.
 		// For now, ensuring it's not nil before proceeding.
@@ -333,4 +333,4 @@ func TestNewsletterAPI_UpdateAndDelete(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, respDeleteNonExistent.StatusCode)
 		respDeleteNonExistent.Body.Close()
 	})
-} 
+}

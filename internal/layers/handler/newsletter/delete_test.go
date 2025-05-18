@@ -11,6 +11,7 @@ import (
 	h "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/newsletter"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	// Mocks are defined in create_test.go
 )
 
@@ -31,7 +32,7 @@ func TestDeleteHandler(t *testing.T) {
 			return "test-firebase-uid", nil
 		}
 		mockEditorRepo.On("GetEditorByFirebaseUID", "test-firebase-uid").Return(&repository.Editor{ID: editorID}, nil).Once()
-		mockService.On("DeleteNewsletter", newsletterID, editorID).Return(nil).Once()
+		mockService.On("DeleteNewsletter", mock.Anything, newsletterID, editorID).Return(nil).Once()
 
 		req := httptest.NewRequest(http.MethodDelete, "/api/newsletters/"+newsletterID, nil)
 		req.SetPathValue("id", newsletterID) // For Go 1.22 PathValue
@@ -89,7 +90,7 @@ func TestDeleteHandler(t *testing.T) {
 	t.Run("Error - Service sql.ErrNoRows (Not Found/Forbidden)", func(t *testing.T) {
 		auth.VerifyFirebaseJWT = func(r *http.Request) (string, error) { return "test-uid", nil }
 		mockEditorRepo.On("GetEditorByFirebaseUID", "test-uid").Return(&repository.Editor{ID: editorID}, nil).Once()
-		mockService.On("DeleteNewsletter", newsletterID, editorID).Return(sql.ErrNoRows).Once()
+		mockService.On("DeleteNewsletter", mock.Anything, newsletterID, editorID).Return(sql.ErrNoRows).Once()
 
 		req := httptest.NewRequest(http.MethodDelete, "/api/newsletters/"+newsletterID, nil)
 		req.SetPathValue("id", newsletterID)
@@ -103,7 +104,7 @@ func TestDeleteHandler(t *testing.T) {
 	t.Run("Error - Service Generic Error", func(t *testing.T) {
 		auth.VerifyFirebaseJWT = func(r *http.Request) (string, error) { return "test-uid", nil }
 		mockEditorRepo.On("GetEditorByFirebaseUID", "test-uid").Return(&repository.Editor{ID: editorID}, nil).Once()
-		mockService.On("DeleteNewsletter", newsletterID, editorID).Return(errors.New("some other error")).Once()
+		mockService.On("DeleteNewsletter", mock.Anything, newsletterID, editorID).Return(errors.New("some other error")).Once()
 
 		req := httptest.NewRequest(http.MethodDelete, "/api/newsletters/"+newsletterID, nil)
 		req.SetPathValue("id", newsletterID)
@@ -113,4 +114,4 @@ func TestDeleteHandler(t *testing.T) {
 		mockService.AssertExpectations(t)
 		mockEditorRepo.AssertExpectations(t)
 	})
-} 
+}
