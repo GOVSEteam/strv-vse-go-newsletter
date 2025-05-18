@@ -6,20 +6,24 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/pkg/email" // Added email package
 	"github.com/google/uuid"
 )
 
 // ErrAlreadySubscribed is returned when a user tries to subscribe to a newsletter they are already subscribed to.
 var ErrAlreadySubscribed = errors.New("email is already subscribed to this newsletter")
+
 // ErrNewsletterNotFound is returned when a subscription attempt is made for a non-existent newsletter.
 var ErrNewsletterNotFound = errors.New("newsletter not found")
+
 // ErrSubscriptionNotFound is returned when an attempt to modify a subscription fails because it doesn't exist.
 var ErrSubscriptionNotFound = errors.New("subscription not found for the given email and newsletter ID")
+
 // ErrInvalidOrExpiredToken is returned when a confirmation token is invalid, not found, or expired.
 var ErrInvalidOrExpiredToken = errors.New("confirmation token is invalid or expired")
+
 // ErrAlreadyConfirmed is returned when a subscription is already confirmed.
 var ErrAlreadyConfirmed = errors.New("subscription is already confirmed")
 
@@ -28,7 +32,7 @@ var ErrAlreadyConfirmed = errors.New("subscription is already confirmed")
 type SubscriberService struct {
 	subscriberRepo repository.SubscriberRepository
 	newsletterRepo repository.NewsletterRepository // Added newsletter repository dependency
-	emailService   email.EmailService // Added EmailService dependency
+	emailService   email.EmailService              // Added EmailService dependency
 	// We might add other dependencies like an EmailService later
 }
 
@@ -50,9 +54,9 @@ type SubscribeToNewsletterRequest struct {
 
 // SubscribeToNewsletterResponse defines the output after a successful subscription.
 type SubscribeToNewsletterResponse struct {
-	SubscriberID string `json:"subscriber_id"`
-	Email        string `json:"email"`
-	NewsletterID string `json:"newsletter_id"`
+	SubscriberID string                  `json:"subscriber_id"`
+	Email        string                  `json:"email"`
+	NewsletterID string                  `json:"newsletter_id"`
 	Status       models.SubscriberStatus `json:"status"`
 }
 
@@ -227,4 +231,4 @@ func (s *SubscriberService) ConfirmSubscription(ctx context.Context, req Confirm
 	// TODO: Optionally, send a "Welcome" or "Subscription Confirmed" email.
 
 	return nil
-} 
+}
