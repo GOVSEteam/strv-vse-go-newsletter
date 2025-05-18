@@ -13,11 +13,11 @@ import (
 
 // SubscriberHandler handles HTTP requests for subscriber operations.
 type SubscriberHandler struct {
-	subscriberService *service.SubscriberService
+	subscriberService service.SubscriberServiceInterface // Use interface
 }
 
 // NewSubscriberHandler creates a new SubscriberHandler.
-func NewSubscriberHandler(ss *service.SubscriberService) *SubscriberHandler {
+func NewSubscriberHandler(ss service.SubscriberServiceInterface) *SubscriberHandler { // Accept interface
 	return &SubscriberHandler{
 		subscriberService: ss,
 	}
@@ -131,4 +131,4 @@ func (h *SubscriberHandler) ConfirmSubscriptionHandler(w http.ResponseWriter, r 
 	// On successful confirmation, you might redirect to a success page on your frontend,
 	// or simply return a success message.
 	handler.JSONResponse(w, map[string]string{"message": "Subscription confirmed successfully"}, http.StatusOK)
-} 
+}

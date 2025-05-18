@@ -64,7 +64,7 @@ func UpdateHandler(svc service.NewsletterServiceInterface, editorRepo repository
 			// Let's proceed, it will just update `updated_at` if both are nil.
 		}
 
-		updatedNewsletter, err := svc.UpdateNewsletter(newsletterID, editor.ID, req.Name, req.Description)
+		updatedNewsletter, err := svc.UpdateNewsletter(r.Context(), newsletterID, editor.ID, req.Name, req.Description)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				commonHandler.JSONError(w, "Newsletter not found or you don't have permission to update it", http.StatusNotFound) // Or StatusForbidden
@@ -80,4 +80,4 @@ func UpdateHandler(svc service.NewsletterServiceInterface, editorRepo repository
 
 		commonHandler.JSONResponse(w, updatedNewsletter, http.StatusOK)
 	}
-} 
+}

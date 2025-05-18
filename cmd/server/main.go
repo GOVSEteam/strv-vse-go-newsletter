@@ -16,7 +16,7 @@ func main() {
 	fmt.Println("Starting App on port 8080...")
 
 	// Initialize all dependencies and setup routes
-	appRouter := router.InitializeAndSetupRouter() // Changed to use the new setup function
+	appRouter := router.Router() // Corrected to use the existing Router function
 
 	addr := ":8080"
 	fmt.Printf("Server listening on %s\n", addr)

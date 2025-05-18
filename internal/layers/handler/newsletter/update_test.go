@@ -15,6 +15,7 @@ import (
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	// Mocks are defined in create_test.go
 )
 
@@ -49,7 +50,7 @@ func TestUpdateHandler(t *testing.T) {
 			Description: updateDesc,
 			UpdatedAt:   time.Now(),
 		}
-		mockService.On("UpdateNewsletter", newsletterID, editorID, &updateName, &updateDesc).Return(expectedNewsletter, nil).Once()
+		mockService.On("UpdateNewsletter", mock.Anything, newsletterID, editorID, &updateName, &updateDesc).Return(expectedNewsletter, nil).Once()
 
 		bodyBytes, _ := json.Marshal(payload)
 		req := httptest.NewRequest(http.MethodPatch, "/api/newsletters/"+newsletterID, bytes.NewReader(bodyBytes))
@@ -145,7 +146,7 @@ func TestUpdateHandler(t *testing.T) {
 
 		updateName := "Valid Name"
 		payload := h.UpdateNewsletterRequest{Name: &updateName}
-		mockService.On("UpdateNewsletter", newsletterID, editorID, &updateName, (*string)(nil)).Return(nil, sql.ErrNoRows).Once()
+		mockService.On("UpdateNewsletter", mock.Anything, newsletterID, editorID, &updateName, (*string)(nil)).Return(nil, sql.ErrNoRows).Once()
 
 		bodyBytes, _ := json.Marshal(payload)
 		req := httptest.NewRequest(http.MethodPatch, "/api/newsletters/"+newsletterID, bytes.NewReader(bodyBytes))
@@ -163,7 +164,7 @@ func TestUpdateHandler(t *testing.T) {
 
 		conflictName := "Taken Name"
 		payload := h.UpdateNewsletterRequest{Name: &conflictName}
-		mockService.On("UpdateNewsletter", newsletterID, editorID, &conflictName, (*string)(nil)).Return(nil, service.ErrNewsletterNameTaken).Once()
+		mockService.On("UpdateNewsletter", mock.Anything, newsletterID, editorID, &conflictName, (*string)(nil)).Return(nil, service.ErrNewsletterNameTaken).Once()
 
 		bodyBytes, _ := json.Marshal(payload)
 		req := httptest.NewRequest(http.MethodPatch, "/api/newsletters/"+newsletterID, bytes.NewReader(bodyBytes))
@@ -174,4 +175,4 @@ func TestUpdateHandler(t *testing.T) {
 		mockService.AssertExpectations(t)
 		mockEditorRepo.AssertExpectations(t)
 	})
-} 
+}

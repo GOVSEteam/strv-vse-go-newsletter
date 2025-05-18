@@ -2,6 +2,7 @@ package newsletter_test
 
 import (
 	"bytes"
+	"context" // Added context
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,8 @@ import (
 	h "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/newsletter" // Alias for handler package
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models" // Added for models.Post
+	"github.com/google/uuid"                                      // Added for uuid.UUID
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -44,29 +47,91 @@ type MockNewsletterService struct {
 	mock.Mock
 }
 
-func (m *MockNewsletterService) ListNewslettersByEditorID(editorID string, limit int, offset int) ([]repository.Newsletter, int, error) {
-	args := m.Called(editorID, limit, offset)
+// --- Newsletter Methods ---
+func (m *MockNewsletterService) ListNewslettersByEditorID(ctx context.Context, editorID string, limit int, offset int) ([]repository.Newsletter, int, error) {
+	args := m.Called(ctx, editorID, limit, offset)
+	if args.Get(0) == nil {
+		// Handle case where no newsletters are returned but no error (e.g., empty list)
+		if args.Error(2) == nil {
+			return []repository.Newsletter{}, args.Int(1), nil
+		}
+		return nil, 0, args.Error(2)
+	}
 	return args.Get(0).([]repository.Newsletter), args.Int(1), args.Error(2)
 }
 
-func (m *MockNewsletterService) CreateNewsletter(editorID, name, description string) (*repository.Newsletter, error) {
-	args := m.Called(editorID, name, description)
+func (m *MockNewsletterService) CreateNewsletter(ctx context.Context, editorID, name, description string) (*repository.Newsletter, error) {
+	args := m.Called(ctx, editorID, name, description)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*repository.Newsletter), args.Error(1)
 }
 
-func (m *MockNewsletterService) UpdateNewsletter(newsletterID string, editorID string, name *string, description *string) (*repository.Newsletter, error) {
-	args := m.Called(newsletterID, editorID, name, description)
+func (m *MockNewsletterService) UpdateNewsletter(ctx context.Context, newsletterID string, editorID string, name *string, description *string) (*repository.Newsletter, error) {
+	args := m.Called(ctx, newsletterID, editorID, name, description)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*repository.Newsletter), args.Error(1)
 }
 
-func (m *MockNewsletterService) DeleteNewsletter(newsletterID string, editorID string) error {
-	args := m.Called(newsletterID, editorID)
+func (m *MockNewsletterService) DeleteNewsletter(ctx context.Context, newsletterID string, editorID string) error {
+	args := m.Called(ctx, newsletterID, editorID)
+	return args.Error(0)
+}
+
+func (m *MockNewsletterService) GetNewsletterByID(ctx context.Context, newsletterID string) (*repository.Newsletter, error) {
+	args := m.Called(ctx, newsletterID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*repository.Newsletter), args.Error(1)
+}
+
+// --- Post Methods (to satisfy NewsletterServiceInterface) ---
+func (m *MockNewsletterService) CreatePost(ctx context.Context, editorFirebaseUID string, newsletterID uuid.UUID, title string, content string) (*models.Post, error) {
+	args := m.Called(ctx, editorFirebaseUID, newsletterID, title, content)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Post), args.Error(1)
+}
+
+func (m *MockNewsletterService) GetPostByID(ctx context.Context, postID uuid.UUID) (*models.Post, error) {
+	args := m.Called(ctx, postID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Post), args.Error(1)
+}
+
+func (m *MockNewsletterService) ListPostsByNewsletter(ctx context.Context, newsletterID uuid.UUID, limit int, offset int) ([]*models.Post, int, error) {
+	args := m.Called(ctx, newsletterID, limit, offset)
+	if args.Get(0) == nil {
+		if args.Error(2) == nil {
+			return []*models.Post{}, args.Int(1), nil
+		}
+		return nil, 0, args.Error(2)
+	}
+	return args.Get(0).([]*models.Post), args.Int(1), args.Error(2)
+}
+
+func (m *MockNewsletterService) UpdatePost(ctx context.Context, editorFirebaseUID string, postID uuid.UUID, title *string, content *string) (*models.Post, error) {
+	args := m.Called(ctx, editorFirebaseUID, postID, title, content)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Post), args.Error(1)
+}
+
+func (m *MockNewsletterService) DeletePost(ctx context.Context, editorFirebaseUID string, postID uuid.UUID) error {
+	args := m.Called(ctx, editorFirebaseUID, postID)
+	return args.Error(0)
+}
+
+func (m *MockNewsletterService) MarkPostAsPublished(ctx context.Context, editorFirebaseUID string, postID uuid.UUID) error {
+	args := m.Called(ctx, editorFirebaseUID, postID)
 	return args.Error(0)
 }
 
@@ -95,7 +160,7 @@ func TestCreateHandler(t *testing.T) {
 			CreatedAt:   time.Now(),
 			UpdatedAt:   time.Now(),
 		}
-		mockService.On("CreateNewsletter", "editor-123", newsletterData.Name, newsletterData.Description).Return(expectedNewsletter, nil).Once()
+		mockService.On("CreateNewsletter", mock.Anything, "editor-123", newsletterData.Name, newsletterData.Description).Return(expectedNewsletter, nil).Once()
 
 		bodyBytes, _ := json.Marshal(newsletterData)
 		req := httptest.NewRequest(http.MethodPost, "/api/newsletters", bytes.NewReader(bodyBytes))
@@ -140,6 +205,8 @@ func TestCreateHandler(t *testing.T) {
 		reqBody := h.CreateNewsletterRequest{Name: "Test", Description: "Test"}
 		bodyBytes, _ := json.Marshal(reqBody)
 		req := httptest.NewRequest(http.MethodPost, "/api/newsletters", bytes.NewReader(bodyBytes))
+		// Add context to request if needed by handlers, though ServeHTTP usually handles it.
+		// req = req.WithContext(context.Background()) 
 		rr := httptest.NewRecorder()
 		httpHandler.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusForbidden, rr.Code)
@@ -181,7 +248,7 @@ func TestCreateHandler(t *testing.T) {
 		mockEditorRepo.On("GetEditorByFirebaseUID", "test-firebase-uid").Return(&repository.Editor{ID: "editor-123"}, nil).Once()
 
 		newsletterData := h.CreateNewsletterRequest{Name: "Taken Name", Description: "A test desc"}
-		mockService.On("CreateNewsletter", "editor-123", newsletterData.Name, newsletterData.Description).Return(nil, service.ErrNewsletterNameTaken).Once()
+		mockService.On("CreateNewsletter", mock.Anything, "editor-123", newsletterData.Name, newsletterData.Description).Return(nil, service.ErrNewsletterNameTaken).Once()
 
 		bodyBytes, _ := json.Marshal(newsletterData)
 		req := httptest.NewRequest(http.MethodPost, "/api/newsletters", bytes.NewReader(bodyBytes))
@@ -200,7 +267,7 @@ func TestCreateHandler(t *testing.T) {
 		mockEditorRepo.On("GetEditorByFirebaseUID", "test-firebase-uid").Return(&repository.Editor{ID: "editor-123"}, nil).Once()
 
 		newsletterData := h.CreateNewsletterRequest{Name: "Good Name", Description: "A test desc"}
-		mockService.On("CreateNewsletter", "editor-123", newsletterData.Name, newsletterData.Description).Return(nil, errors.New("some db error")).Once()
+		mockService.On("CreateNewsletter", mock.Anything, "editor-123", newsletterData.Name, newsletterData.Description).Return(nil, errors.New("some db error")).Once()
 
 		bodyBytes, _ := json.Marshal(newsletterData)
 		req := httptest.NewRequest(http.MethodPost, "/api/newsletters", bytes.NewReader(bodyBytes))
@@ -211,4 +278,4 @@ func TestCreateHandler(t *testing.T) {
 		mockService.AssertExpectations(t)
 		mockEditorRepo.AssertExpectations(t)
 	})
-} 
+}

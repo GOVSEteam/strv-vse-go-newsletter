@@ -66,7 +66,7 @@ func ListHandler(svc service.NewsletterServiceInterface, editorRepo repository.E
 			}
 		}
 
-		newsletters, total, err := svc.ListNewslettersByEditorID(editor.ID, limit, offset)
+		newsletters, total, err := svc.ListNewslettersByEditorID(r.Context(), editor.ID, limit, offset)
 		if err != nil {
 			commonHandler.JSONError(w, "Failed to list newsletters: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -80,4 +80,4 @@ func ListHandler(svc service.NewsletterServiceInterface, editorRepo repository.E
 		}
 		commonHandler.JSONResponse(w, response, http.StatusOK)
 	}
-} 
+}
