@@ -2,7 +2,9 @@ package setup_firebase
 
 import (
 	"context"
-	"firebase.google.com/go/v4"
+
+	"cloud.google.com/go/firestore"
+	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/auth"
 	"google.golang.org/api/option"
 	"log"
@@ -10,6 +12,7 @@ import (
 )
 
 var authClient *auth.Client
+var firestoreClient *firestore.Client
 
 func InitFirebase() {
 	credJSON := os.Getenv("FIREBASE_SERVICE_ACCOUNT")
@@ -17,7 +20,7 @@ func InitFirebase() {
 		log.Fatal("FIREBASE_SERVICE_ACCOUNT env-var is not set")
 	}
 
-	opt := option.WithCredentialsJSON([]byte(credJSON)) // ← replaces WithCredentialsFile
+	opt := option.WithCredentialsJSON([]byte(credJSON))
 	app, err := firebase.NewApp(context.Background(), nil, opt)
 	if err != nil {
 		log.Fatalf("error initializing Firebase app: %v", err)
@@ -28,6 +31,12 @@ func InitFirebase() {
 		log.Fatalf("error getting Auth client: %v", err)
 	}
 	authClient = client
+
+	fsClient, err := app.Firestore(context.Background())
+	if err != nil {
+		log.Fatalf("error getting Firestore client: %v", err)
+	}
+	firestoreClient = fsClient
 }
 
 func GetAuthClient() *auth.Client {
@@ -35,4 +44,11 @@ func GetAuthClient() *auth.Client {
 		InitFirebase()
 	}
 	return authClient
+}
+
+func GetFirestoreClient() *firestore.Client {
+	if firestoreClient == nil {
+		InitFirebase()
+	}
+	return firestoreClient
 }
