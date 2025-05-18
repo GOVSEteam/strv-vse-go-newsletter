@@ -3,7 +3,6 @@ package router
 import (
 	"net/http"
 
-	globalHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler" // for FirebasePasswordResetRequestHandler
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/editor"
 	newsletterHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/newsletter" // Import specific newsletter handlers
 	postHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/post"             // Import post handlers
@@ -36,7 +35,7 @@ func Router() http.Handler {
 	mux.HandleFunc("/editor/signup", editor.EditorSignUpHandler(editorService))
 	mux.HandleFunc("/editor/signin", editor.EditorSignInHandler(editorService))
 	// Assuming FirebasePasswordResetRequestHandler is independent or correctly defined elsewhere
-	mux.HandleFunc("/editor/password-reset-request", globalHandler.FirebasePasswordResetRequestHandler())
+	mux.HandleFunc("/editor/password-reset-request", editor.FirebasePasswordResetRequestHandler())
 
 	// Handler for /api/newsletters (collection)
 	mux.HandleFunc("/api/newsletters", func(w http.ResponseWriter, r *http.Request) {
