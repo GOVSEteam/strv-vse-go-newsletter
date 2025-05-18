@@ -25,13 +25,13 @@ func Router() http.Handler {
 		w.Write([]byte("ok"))
 	})
 
-	mux.HandleFunc("/api/newsletters", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/editor/signup", editor.EditorSignUpHandler(editorService))
+	mux.HandleFunc("/editor/signin", editor.EditorSignInHandler(editorService))
+	mux.HandleFunc("/editor/password-reset-request", handler.FirebasePasswordResetRequestHandler())
+
+	mux.HandleFunc("/newsletter", func(w http.ResponseWriter, r *http.Request) {
 		handler.NewslettersHandler(w, r, newsletterService, editorRepo)
 	})
-
-	mux.HandleFunc("/signup", editor.EditorSignUpHandler(editorService))
-	mux.HandleFunc("/signin", editor.EditorSignInHandler(editorService))
-	mux.HandleFunc("/editors/password-reset-request", handler.FirebasePasswordResetRequestHandler())
 
 	return mux
 }

@@ -111,3 +111,4 @@ The application uses **PostgreSQL** as the primary database for storing data. Th
 
 Given the size of the project and number of tables, automatic migrations are not implemented. If you want to change database schema, do that manually from the web administration console or, for more advanced use-cases, by running `railway connect` (you need to have the Railway CLI installed).
 
+

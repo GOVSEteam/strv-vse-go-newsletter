@@ -27,14 +27,13 @@ Implement editor registration, login, JWT-based stateless authentication, and pa
 - Tests for all flows
 
 ## APIs
-- POST /editors/register
-- POST /editors/login
-- POST /editors/password-reset-request
-- POST /editors/password-reset
+- POST /editor/signin
+- POST /editor/signup
+- POST /editor/password-reset-request
 
 ## Data Models
-- editors (id, email, password_hash, created_at, ...)
-- password_reset_tokens (id, editor_id, token, expires_at)
+- editors (id, firebase_id, email)
+- credentials are stored in firebase
 
 ## State
 - Editor auth flows are functional and secure
