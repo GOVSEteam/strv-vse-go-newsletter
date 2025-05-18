@@ -2,20 +2,25 @@ package main
 
 import (
 	"fmt"
-	http2 "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/router"
-	"github.com/joho/godotenv"
 	"log"
 	"net/http"
+
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/router"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	// Load .env file. Errors are ignored, so if it's not present, app will rely on actual env vars.
 	_ = godotenv.Load()
 
-	router := http2.Router()
+	fmt.Println("Starting App on port 8080...")
+
+	// Initialize all dependencies and setup routes
+	appRouter := router.InitializeAndSetupRouter() // Changed to use the new setup function
 
 	addr := ":8080"
 	fmt.Printf("Server listening on %s\n", addr)
-	if err := http.ListenAndServe(addr, router); err != nil {
+	if err := http.ListenAndServe(addr, appRouter); err != nil {
 		log.Fatalf("could not start server: %v", err)
 	}
 }
