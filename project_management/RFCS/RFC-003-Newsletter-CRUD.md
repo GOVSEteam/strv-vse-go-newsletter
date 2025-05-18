@@ -42,4 +42,4 @@ Implement create, rename, and delete operations for newsletters. Each newsletter
 - Unit and integration tests for all endpoints
 
 ## Notes
-- Deletion must address related posts and subscribers 
+- Deletion must address related posts and subscribers
