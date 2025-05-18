@@ -8,7 +8,7 @@ import (
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/pkg/email" // Added email package
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/setup"      // Updated path
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/setup"     // Updated path
 	"log"
 	"net/http"
 )
@@ -45,8 +45,10 @@ func SetupRouter(
 	mux.HandleFunc("GET /api/subscribers/confirm", subH.ConfirmSubscriptionHandler)
 
 	// Editor/Auth routes
-	mux.HandleFunc("POST /signup", signUpH)
-	mux.HandleFunc("POST /signin", signInH)
+	mux.HandleFunc("POST /editor/signup", signUpH)
+	mux.HandleFunc("POST /editor/signin", signInH)
+	// Password reset route
+	mux.HandleFunc("POST /editor/password-reset-request", editor.FirebasePasswordResetRequestHandler())
 }
 
 // InitializeAndSetupRouter initializes all dependencies and sets up the router.
@@ -59,7 +61,7 @@ func InitializeAndSetupRouter() http.Handler {
 	log.Println("Database connection successful.")
 
 	log.Println("Initializing Firebase...")
-	setup.InitFirebase() // Updated path
+	setup.InitFirebase()                          // Updated path
 	firestoreClient := setup.GetFirestoreClient() // Updated path
 	if firestoreClient == nil {
 		log.Fatal("Failed to initialize Firestore client, cannot start server.")
@@ -84,7 +86,7 @@ func InitializeAndSetupRouter() http.Handler {
 
 	// Newsletter handlers (individual functions)
 	createNewsletterH := newsletterHandler.CreateHandler(newsletterSvc, editorRepo)
-	listNewslettersH := newsletterHandler.ListHandler(newsletterSvc, editorRepo) // Assuming ListHandler exists
+	listNewslettersH := newsletterHandler.ListHandler(newsletterSvc, editorRepo)    // Assuming ListHandler exists
 	updateNewsletterH := newsletterHandler.UpdateHandler(newsletterSvc, editorRepo) // Assuming UpdateHandler exists
 	deleteNewsletterH := newsletterHandler.DeleteHandler(newsletterSvc, editorRepo) // Assuming DeleteHandler exists
 
