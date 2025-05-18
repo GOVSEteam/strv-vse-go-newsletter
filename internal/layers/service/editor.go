@@ -7,7 +7,7 @@ import (
 	"firebase.google.com/go/v4/auth"
 	"fmt"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/setup-firebase"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/setup"
 	"net/http"
 	"os"
 )
@@ -33,7 +33,7 @@ func NewEditorService(repo repository.EditorRepository) EditorService {
 }
 
 func (s *editorService) SignUp(email, password string) (*repository.Editor, error) {
-	client := setup_firebase.GetAuthClient()
+	client := setup.GetAuthClient()
 	params := (&auth.UserToCreate{}).Email(email).Password(password)
 	user, err := client.CreateUser(context.Background(), params)
 	if err != nil {

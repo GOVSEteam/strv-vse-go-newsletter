@@ -3,7 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/setup-firebase"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/setup"
 	"net/http"
 	"strings"
 )
@@ -28,7 +28,7 @@ var VerifyFirebaseJWT = func(r *http.Request) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	client := setup_firebase.GetAuthClient()
+	client := setup.GetAuthClient()
 	decoded, err := client.VerifyIDToken(context.Background(), token)
 	if err != nil {
 		return "", err

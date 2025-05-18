@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+
 type Newsletter struct {
 	ID          string    `json:"id"`
 	EditorID    string    `json:"editor_id"`
@@ -32,6 +33,7 @@ type PostgresNewsletterRepo struct {
 func NewsletterRepo(db *sql.DB) NewsletterRepository {
 	return &PostgresNewsletterRepo{db: db}
 }
+
 
 // ListNewsletters is deprecated, use ListNewslettersByEditorID
 // func (r *PostgresNewsletterRepo) ListNewsletters() ([]Newsletter, error) {
@@ -63,6 +65,7 @@ func (r *PostgresNewsletterRepo) ListNewslettersByEditorID(editorID string, limi
 		ORDER BY created_at DESC
 		LIMIT $2 OFFSET $3`
 	rows, err := r.db.Query(listQuery, editorID, limit, offset)
+
 	if err != nil {
 		return nil, 0, err
 	}

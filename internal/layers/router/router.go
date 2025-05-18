@@ -6,14 +6,14 @@ import (
 	newsletterHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/newsletter" // New specific newsletter handlers
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/setup-postgresql"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/setup"
 	"net/http"
 )
 
 func Router() http.Handler {
 	mux := http.NewServeMux()
 
-	db := setup_postgresql.ConnectDB()
+	db := setup.ConnectDB()
 
 	newsletterRepo := repository.NewsletterRepo(db)
 	newsletterSvc := service.NewsletterService(newsletterRepo) // Renamed for clarity
