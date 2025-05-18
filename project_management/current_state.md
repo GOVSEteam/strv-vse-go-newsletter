@@ -30,7 +30,7 @@ The codebase shows a solid foundation with clean architecture, proper separation
 |--------|-------|--------|----------|
 | RFC-001 | Project Setup & Tooling | Mostly Complete | 80% |
 | RFC-002 | Editor Auth & Account Management | Mostly Complete | 85% |
-| RFC-003 | Newsletter CRUD | Partially Complete | 40% |
+| RFC-003 | Newsletter CRUD | Mostly Complete | 95% |
 | RFC-004 | Subscriber Management | Not Started | 0% |
 | RFC-005 | Publishing & Email Delivery | Not Started | 0% |
 | RFC-006 | List Subscribers | Not Started | 0% |
@@ -99,31 +99,43 @@ The codebase shows a solid foundation with clean architecture, proper separation
 ---
 
 ### RFC-003: Newsletter CRUD
-**Status: Partially Complete (40%)**
+**Status: Mostly Complete (95%)**
 
 #### Implemented
-- ✅ Create Newsletter with proper JWT auth and editor linkage
-- ✅ List Newsletters (public endpoint, no auth required)
-- ✅ Basic data models and repositories
+- ✅ **All core CRUD Endpoints:**
+    - ✅ `POST /api/newsletters` (Create)
+    - ✅ `GET /api/newsletters` (List by editor, with pagination)
+    - ✅ `PATCH /api/newsletters/{id}` (Update name/description)
+    - ✅ `DELETE /api/newsletters/{id}` (Delete)
+- ✅ **Ownership & Uniqueness:**
+    - ✅ Single-editor ownership enforced via JWT and editor ID checks.
+    - ✅ Newsletter name uniqueness per editor enforced (service layer check, 409 Conflict).
+- ✅ **Validation & Error Handling:**
+    - ✅ Input validation for request bodies, path parameters, and pagination parameters.
+    - ✅ Standardized JSON error responses with appropriate HTTP status codes (400, 401, 403, 404, 405, 409, 500).
+    - ✅ Specific handling for `sql.ErrNoRows` (for 404) and `service.ErrNewsletterNameTaken` (for 409).
+- ✅ **Data Models & Repository:**
+    - ✅ `newsletters` table schema defined with `id`, `editor_id`, `name`, `description`, `created_at`, `updated_at`.
+    - ✅ Repository methods for all CRUD operations, including ownership checks and pagination support for lists.
+- ✅ **Testing:**
+    - ✅ Comprehensive unit tests for all handler logic (Create, List, Update, Delete) covering success, auth, validation, and service error cases.
+    - ✅ Comprehensive integration tests for all API endpoints, interacting with a real database, covering various scenarios including "not found" and "name conflict".
+- ✅ **Refactoring & Structure:**
+    - ✅ Split monolithic newsletter handler into specific files (`create.go`, `list.go`, `update.go`, `delete.go`).
+    - ✅ Introduced common response helpers (`internal/layers/handler/response.go`).
+    - ✅ `ListNewsletters` in repository and service refactored to `ListNewslettersByEditorID` with pagination and total count.
+    - ✅ `UpdatedAt` field added to `Newsletter` model and handled in repository.
 
-#### Needs Improvement
-- ⚠️ List endpoint doesn't filter by editor (shows all newsletters)
-- ⚠️ Create endpoint has minimal validation
-- ⚠️ Error handling is minimal
+#### Needs Improvement/Refinement (Minor)
+- ⚠️ Consider adding max length validation for newsletter `name` and `description` as a general hardening step (not explicitly in RFC scope).
+- ⚠️ Service layer error differentiation: If the service layer were to introduce more *specific user-correctable* validation errors (beyond name conflicts), handlers would need to map them to appropriate 4xx codes. Currently, other service errors default to 500.
 
-#### Missing
-- ❌ Update/Rename Newsletter functionality
-- ❌ Delete Newsletter functionality
-- ❌ Ownership checks for newsletter operations beyond creation
-- ❌ Pagination for list endpoint
-- ❌ Tests for newsletter operations
+#### Pending Dependencies
+- ⏳ **Subscriber Deletion on Newsletter Delete:** The acceptance criterion "Related data handled on delete" regarding subscribers is pending the completion of RFC-004 (Subscriber Management). A `TODO` is in place in `NewsletterService.DeleteNewsletter`.
+- ℹ️ **Post Deletion on Newsletter Delete:** Deletion of related posts will be handled by `ON DELETE CASCADE` in the (future) `posts` table schema, similar to how `editor` deletion cascades. This is a forward-looking note for the RFC related to Posts.
 
-#### Next Steps
-1. Implement PATCH endpoint for updating newsletter name/description
-2. Implement DELETE endpoint for removing newsletters
-3. Add ownership verification for all operations
-4. Add pagination for list endpoint
-5. Add tests for all CRUD operations
+#### Next Steps (for this RFC)
+- None. Core functionality is complete. Outstanding items are dependencies or minor optional refinements.
 
 ---
 
