@@ -24,6 +24,7 @@ type NewsletterRepository interface {
 	UpdateNewsletter(newsletterID string, editorID string, name *string, description *string) (*Newsletter, error)
 	DeleteNewsletter(newsletterID string, editorID string) error
 	GetNewsletterByNameAndEditorID(name string, editorID string) (*Newsletter, error)
+	GetNewsletterByID(newsletterID string) (*Newsletter, error)
 }
 
 type PostgresNewsletterRepo struct {
@@ -219,6 +220,25 @@ func (r *PostgresNewsletterRepo) GetNewsletterByNameAndEditorID(name string, edi
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil // Not found, no error to bubble up, service will interpret this
+		}
+		return nil, err // Other DB error
+	}
+	return &n, nil
+}
+
+// GetNewsletterByID fetches a newsletter by its ID, without checking editor ownership.
+func (r *PostgresNewsletterRepo) GetNewsletterByID(newsletterID string) (*Newsletter, error) {
+	query := `
+		SELECT id, editor_id, name, description, created_at, updated_at 
+		FROM newsletters 
+		WHERE id = $1`
+	row := r.db.QueryRow(query, newsletterID)
+	
+	var n Newsletter
+	err := row.Scan(&n.ID, &n.EditorID, &n.Name, &n.Description, &n.CreatedAt, &n.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil // Not found, return nil, nil to distinguish from DB error
 		}
 		return nil, err // Other DB error
 	}

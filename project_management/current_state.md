@@ -31,7 +31,7 @@ The codebase shows a solid foundation with clean architecture, proper separation
 | RFC-001 | Project Setup & Tooling | Mostly Complete | 80% |
 | RFC-002 | Editor Auth & Account Management | Mostly Complete | 85% |
 | RFC-003 | Newsletter CRUD | Mostly Complete | 95% |
-| RFC-004 | Subscriber Management | Not Started | 0% |
+| RFC-004 | Subscriber Management | Started | 50% |
 | RFC-005 | Publishing & Email Delivery | Not Started | 0% |
 | RFC-006 | List Subscribers | Not Started | 0% |
 | RFC-007 | Non-Functional: Docs, Quality, Naming | Minimally Started | 10% |
@@ -140,25 +140,49 @@ The codebase shows a solid foundation with clean architecture, proper separation
 ---
 
 ### RFC-004: Subscriber Management
-**Status: Not Started (0%)**
+**Status: Started (50%)**
 
-#### Implemented
-- None
+#### Implemented (Initial Setup & Features)
+- ✅ Firestore client initialization added to Firebase setup (`internal/setup-firebase/firebase.go`).
+- ✅ `Subscriber` data model defined (`internal/models/subscriber.go`), including `Unsubscribed`, `PendingConfirmation` statuses and token/expiry fields.
+- ✅ **Subscribe Flow:**
+    - ✅ `SubscriberRepository` with `CreateSubscriber` method for Firestore.
+    - ✅ `SubscriberService` with `SubscribeToNewsletter` method (initiates confirmation flow).
+    - ✅ `SubscriberHandler` for `POST /api/newsletters/{newsletterID}/subscribe` endpoint.
+    - ✅ Route for subscribe registered and dependencies wired.
+    - ✅ Uniqueness check (email per newsletter) for subscribe.
+    - ✅ Newsletter existence check for subscribe.
+    - ✅ Unit tests for `SubscriberHandler.SubscribeToNewsletter`.
+    - ✅ Unit tests for `SubscriberService.SubscribeToNewsletter`.
+- ✅ **Unsubscribe Flow:**
+    - ✅ `SubscriberRepository` with `UpdateSubscriberStatus` method for Firestore.
+    - ✅ `SubscriberService` with `UnsubscribeFromNewsletter` method (marks as unsubscribed).
+    - ✅ `SubscriberHandler` for `DELETE /api/newsletters/{newsletterID}/subscribers?email={email}` endpoint.
+    - ✅ Route for unsubscribe registered.
+    - ✅ Unit tests for `SubscriberHandler.UnsubscribeFromNewsletter`.
+    - ✅ Unit tests for `SubscriberService.UnsubscribeFromNewsletter`.
+- ✅ **Confirmation Email Flow (Initial Backend):**
+    - ✅ `EmailService` interface and `ConsoleEmailService` mock created (`internal/pkg/email/email.go`).
+    - ✅ `SubscriberService.SubscribeToNewsletter` updated to generate token, set pending status, and call `EmailService`.
+    - ✅ `SubscriberRepository` methods `GetSubscriberByConfirmationToken` and `ConfirmSubscriber` added.
+    - ✅ `SubscriberService.ConfirmSubscription` method added to validate token and activate subscriber.
+    - ✅ `SubscriberHandler.ConfirmSubscriptionHandler` and `GET /api/subscribers/confirm` route added.
+    - ✅ Unit tests for `SubscriberService.ConfirmSubscription`.
+    - ✅ Unit tests for `SubscriberHandler.ConfirmSubscriptionHandler`.
 
 #### Missing
-- ❌ Firebase Firestore integration for subscribers
-- ❌ Subscribe to newsletter endpoint
-- ❌ Confirmation email functionality
-- ❌ Unsubscribe functionality
-- ❌ Unique link generation for newsletters
-- ❌ Tests for subscriber management
+- ✅ Firebase Firestore integration for subscribers (*Setup complete, operations pending API enablement for full testing*)
+- ✅ Subscribe to newsletter endpoint (*Implemented, unit tested, pending integration test with live Firestore & email flow*)
+- ✅ Unsubscribe functionality (*Implemented, unit tested, pending integration test with live Firestore*)
+- ✅ Confirmation email functionality (*Backend logic implemented with mock emailer and unit tested; Pending real email service integration, frontend link, and integration tests*)
+- ❌ Unique link generation for newsletters (*Likely related to publishing or specific confirmation links for content, not account confirmation*)
+- ⚠️ Tests for subscriber management (*Unit tests for subscribe, unsubscribe & confirmation handler/service done; Integration tests pending API enablement and full flow testing*)
 
 #### Next Steps
-1. Set up Firebase Firestore for subscriber data
-2. Implement subscribe endpoint with unique links
-3. Integrate with email service for confirmation emails
-4. Implement unsubscribe functionality
-5. Add tests for subscriber flows
+1. Verify subscribe, unsubscribe, and confirmation flows once Firestore API is enabled.
+2. Add integration tests for these flows (once API is enabled).
+3. Plan and implement a real email service integration (e.g., SendGrid, AWS SES) when ready.
+4. Refine confirmation link generation (make it configurable, consider frontend URL).
 
 ---
 
