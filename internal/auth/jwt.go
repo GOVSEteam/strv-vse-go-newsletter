@@ -22,7 +22,8 @@ func ExtractBearerToken(r *http.Request) (string, error) {
 }
 
 // VerifyFirebaseJWT verifies the JWT and returns the Firebase UID
-func VerifyFirebaseJWT(r *http.Request) (string, error) {
+// Changed to a variable to allow swapping for tests.
+var VerifyFirebaseJWT = func(r *http.Request) (string, error) {
 	token, err := ExtractBearerToken(r)
 	if err != nil {
 		return "", err
