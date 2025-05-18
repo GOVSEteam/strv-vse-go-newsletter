@@ -31,6 +31,7 @@ func Router() http.Handler {
 
 	mux.HandleFunc("/signup", editor.EditorSignUpHandler(editorService))
 	mux.HandleFunc("/signin", editor.EditorSignInHandler(editorService))
+	mux.HandleFunc("/editors/password-reset-request", handler.FirebasePasswordResetRequestHandler())
 
 	return mux
 }

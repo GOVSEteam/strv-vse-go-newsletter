@@ -29,7 +29,7 @@ The codebase shows a solid foundation with clean architecture, proper separation
 | RFC ID | Title | Status | Progress |
 |--------|-------|--------|----------|
 | RFC-001 | Project Setup & Tooling | Mostly Complete | 80% |
-| RFC-002 | Editor Auth & Account Management | Mostly Complete | 85% |
+| RFC-002 | Editor Auth & Account Management | Mostly Complete | 95% |
 | RFC-003 | Newsletter CRUD | Partially Complete | 40% |
 | RFC-004 | Subscriber Management | Not Started | 0% |
 | RFC-005 | Publishing & Email Delivery | Not Started | 0% |
@@ -71,7 +71,7 @@ The codebase shows a solid foundation with clean architecture, proper separation
 ---
 
 ### RFC-002: Editor Auth & Account Management
-**Status: Mostly Complete (85%)**
+**Status: Mostly Complete (95%)**
 
 #### Implemented
 - ✅ Editor registration via Firebase Auth (`internal/layers/handler/editor/signup.go`)
@@ -79,6 +79,7 @@ The codebase shows a solid foundation with clean architecture, proper separation
 - ✅ JWT verification for Firebase tokens (`internal/auth/jwt.go`)
 - ✅ Local editor records linked to Firebase users (`internal/layers/repository/editor.go`)
 - ✅ Basic input validation for registration/login requests
+- ✅ Password reset flow using Firebase Auth REST API (`internal/layers/handler/editor_password_reset.go`)
 
 #### Needs Improvement
 - ⚠️ JWT verification is only applied to newsletter creation, not consistently across all protected endpoints
@@ -86,15 +87,13 @@ The codebase shows a solid foundation with clean architecture, proper separation
 - ⚠️ No rate limiting or additional security measures for authentication endpoints
 
 #### Missing
-- ❌ Password reset functionality (though likely delegated to Firebase client-side)
 - ❌ Middleware for applying JWT verification consistently
 - ❌ Tests for auth flows
 
 #### Next Steps
 1. Create a middleware for JWT verification to apply consistently
-2. Implement or document the password reset flow
-3. Improve error handling for authentication endpoints
-4. Add tests for auth flows
+2. Improve error handling for authentication endpoints
+3. Add tests for auth flows
 
 ---
 
@@ -264,4 +263,5 @@ Based on the current state and dependencies between RFCs, the following steps sh
    - Improve setup documentation
    - Set up CI/CD pipeline
 
-The completion of these steps will provide a solid foundation for implementing the remaining RFCs (RFC-005 through RFC-008). 
+The completion of these steps will provide a solid foundation for implementing the remaining RFCs (RFC-005 through RFC-008).
+
