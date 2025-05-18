@@ -1,20 +1,18 @@
 package router
 
 import (
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/db"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/editor"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/setup-postgresql"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/setup"
 	"net/http"
 )
 
 func Router() http.Handler {
 	mux := http.NewServeMux()
 
-
-	db := setup_postgresql.ConnectDB()
+	db := setup.ConnectDB()
 
 	newsletterRepo := repository.NewsletterRepo(db)
 	newsletterService := service.NewsletterService(newsletterRepo)
