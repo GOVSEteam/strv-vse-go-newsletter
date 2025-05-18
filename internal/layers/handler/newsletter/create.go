@@ -4,11 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"errors"
+
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/auth"
 	commonHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler" // Alias for common handler package
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
-	"errors"
 )
 
 type CreateNewsletterRequest struct {
@@ -48,7 +49,7 @@ func CreateHandler(svc service.NewsletterServiceInterface, editorRepo repository
 			return
 		}
 
-		newsletter, err := svc.CreateNewsletter(editor.ID, req.Name, req.Description)
+		newsletter, err := svc.CreateNewsletter(r.Context(), editor.ID, req.Name, req.Description)
 		if err != nil {
 			if errors.Is(err, service.ErrNewsletterNameTaken) {
 				commonHandler.JSONError(w, service.ErrNewsletterNameTaken.Error(), http.StatusConflict)
@@ -61,4 +62,4 @@ func CreateHandler(svc service.NewsletterServiceInterface, editorRepo repository
 
 		commonHandler.JSONResponse(w, newsletter, http.StatusCreated)
 	}
-} 
+}

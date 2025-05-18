@@ -13,6 +13,7 @@ import (
 	h "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/newsletter"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	// Mocks are already defined in create_test.go in the same package
 )
 
@@ -36,7 +37,7 @@ func TestListHandler(t *testing.T) {
 			{ID: "nl-2", EditorID: "editor-123", Name: "N2", CreatedAt: time.Now().Add(-time.Hour)},
 		}
 		expectedTotal := 20
-		mockService.On("ListNewslettersByEditorID", "editor-123", h.DefaultLimit, h.DefaultOffset).Return(expectedNewsletters, expectedTotal, nil).Once()
+		mockService.On("ListNewslettersByEditorID", mock.Anything, "editor-123", h.DefaultLimit, h.DefaultOffset).Return(expectedNewsletters, expectedTotal, nil).Once()
 
 		req := httptest.NewRequest(http.MethodGet, "/api/newsletters", nil)
 		rr := httptest.NewRecorder()
@@ -63,7 +64,7 @@ func TestListHandler(t *testing.T) {
 		mockEditorRepo.On("GetEditorByFirebaseUID", "test-firebase-uid").Return(&repository.Editor{ID: "editor-123"}, nil).Once()
 
 		customLimit, customOffset := 5, 10
-		mockService.On("ListNewslettersByEditorID", "editor-123", customLimit, customOffset).Return([]repository.Newsletter{}, 0, nil).Once()
+		mockService.On("ListNewslettersByEditorID", mock.Anything, "editor-123", customLimit, customOffset).Return([]repository.Newsletter{}, 0, nil).Once()
 
 		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/newsletters?limit=%d&offset=%d", customLimit, customOffset), nil)
 		rr := httptest.NewRecorder()
@@ -127,7 +128,7 @@ func TestListHandler(t *testing.T) {
 			return "test-firebase-uid", nil
 		}
 		mockEditorRepo.On("GetEditorByFirebaseUID", "test-firebase-uid").Return(&repository.Editor{ID: "editor-123"}, nil).Once()
-		mockService.On("ListNewslettersByEditorID", "editor-123", h.DefaultLimit, h.DefaultOffset).Return(([]repository.Newsletter)(nil), 0, errors.New("db error")).Once()
+		mockService.On("ListNewslettersByEditorID", mock.Anything, "editor-123", h.DefaultLimit, h.DefaultOffset).Return(([]repository.Newsletter)(nil), 0, errors.New("db error")).Once()
 
 		req := httptest.NewRequest(http.MethodGet, "/api/newsletters", nil)
 		rr := httptest.NewRecorder()
@@ -136,4 +137,4 @@ func TestListHandler(t *testing.T) {
 		mockService.AssertExpectations(t)
 		mockEditorRepo.AssertExpectations(t)
 	})
-} 
+}

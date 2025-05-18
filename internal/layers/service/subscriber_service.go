@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/pkg/email" // Added email package
 	"github.com/google/uuid"
 )
@@ -23,22 +23,25 @@ var ErrInvalidOrExpiredToken = errors.New("confirmation token is invalid or expi
 // ErrAlreadyConfirmed is returned when a subscription is already confirmed.
 var ErrAlreadyConfirmed = errors.New("subscription is already confirmed")
 
+type SubscriberServiceInterface interface {
+	SubscribeToNewsletter(ctx context.Context, req SubscribeToNewsletterRequest) (*SubscribeToNewsletterResponse, error)
+	UnsubscribeFromNewsletter(ctx context.Context, req UnsubscribeFromNewsletterRequest) error
+	ConfirmSubscription(ctx context.Context, req ConfirmSubscriptionRequest) error
+}
+
 // SubscriberService handles business logic for subscriber management.
-// Placeholder for now.
 type SubscriberService struct {
 	subscriberRepo repository.SubscriberRepository
-	newsletterRepo repository.NewsletterRepository // Added newsletter repository dependency
-	emailService   email.EmailService // Added EmailService dependency
-	// We might add other dependencies like an EmailService later
+	newsletterRepo repository.NewsletterRepository
+	emailService   email.EmailService
 }
 
 // NewSubscriberService creates a new SubscriberService.
-// Placeholder for now.
-func NewSubscriberService(subRepo repository.SubscriberRepository, newsRepo repository.NewsletterRepository, emailSvc email.EmailService) *SubscriberService {
+func NewSubscriberService(subRepo repository.SubscriberRepository, newsRepo repository.NewsletterRepository, emailSvc email.EmailService) SubscriberServiceInterface { // Return interface
 	return &SubscriberService{
 		subscriberRepo: subRepo,
-		newsletterRepo: newsRepo, // Store dependency
-		emailService:   emailSvc, // Store EmailService dependency
+		newsletterRepo: newsRepo,
+		emailService:   emailSvc,
 	}
 }
 
@@ -227,4 +230,4 @@ func (s *SubscriberService) ConfirmSubscription(ctx context.Context, req Confirm
 	// TODO: Optionally, send a "Welcome" or "Subscription Confirmed" email.
 
 	return nil
-} 
+}
