@@ -26,7 +26,7 @@ func FirebasePasswordResetRequestHandler() http.HandlerFunc {
 			return
 		}
 
-		apiKey := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+		apiKey := os.Getenv("FIREBASE_API_KEY")
 
 		url := "https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=" + apiKey
 		payload := map[string]interface{}{

@@ -43,9 +43,9 @@ func (s *editorService) SignUp(email, password string) (*repository.Editor, erro
 }
 
 func (s *editorService) SignIn(email, password string) (*SignInResponse, error) {
-	apiKey := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+	apiKey := os.Getenv("FIREBASE_API_KEY")
 	if apiKey == "" {
-		return nil, fmt.Errorf("GOOGLE_APPLICATION_CREDENTIALS env var not set (should be Firebase Web API Key)")
+		return nil, fmt.Errorf("FIREBASE_API_KEY env var not set")
 	}
 	url := fmt.Sprintf("https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=%s", apiKey)
 	payload := map[string]interface{}{
