@@ -5,6 +5,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
+
 type Newsletter struct {
 	ID          string
 	EditorID    string
@@ -25,6 +26,7 @@ type PostgresNewsletterRepo struct {
 func NewsletterRepo(db *sql.DB) NewsletterRepository {
 	return &PostgresNewsletterRepo{db: db}
 }
+
 
 func (r *PostgresNewsletterRepo) ListNewsletters() ([]Newsletter, error) {
 	rows, err := r.db.Query("SELECT id, editor_id, name, description, created_at FROM newsletters ORDER BY created_at DESC")
