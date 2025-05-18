@@ -1,4 +1,4 @@
-package setup_firebase
+package setup
 
 import (
 	"context"
