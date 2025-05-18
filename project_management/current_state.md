@@ -1,6 +1,7 @@
 # Current Implementation State: Go Newsletter Platform
 
 ## Table of Contents
+
 1. Overview
 2. Implementation Status Summary
 3. RFC Status Details
@@ -26,43 +27,48 @@ The codebase shows a solid foundation with clean architecture, proper separation
 
 ## 2. Implementation Status Summary
 
-| RFC ID | Title | Status | Progress |
-|--------|-------|--------|----------|
-| RFC-001 | Project Setup & Tooling | Mostly Complete | 80% |
-| RFC-002 | Editor Auth & Account Management | Mostly Complete | 95% |
-| RFC-003 | Newsletter CRUD | Partially Complete | 40% |
-| RFC-004 | Subscriber Management | Not Started | 0% |
-| RFC-005 | Publishing & Email Delivery | Not Started | 0% |
-| RFC-006 | List Subscribers | Not Started | 0% |
-| RFC-007 | Non-Functional: Docs, Quality, Naming | Minimally Started | 10% |
-| RFC-008 | Optional: Social Auth | Not Started | 0% |
+| RFC ID  | Title                                 | Status             | Progress |
+| ------- | ------------------------------------- | ------------------ | -------- |
+| RFC-001 | Project Setup & Tooling               | Mostly Complete    | 80%      |
+| RFC-002 | Editor Auth & Account Management      | Mostly Complete    | 95%      |
+| RFC-003 | Newsletter CRUD & Posts               | Mostly Complete    | 80%      |
+| RFC-004 | Subscriber Management                 | Partially Complete | 30%      |
+| RFC-005 | Publishing & Email Delivery           | Partially Complete | 50%      |
+| RFC-006 | List Subscribers                      | Not Started        | 0%       |
+| RFC-007 | Non-Functional: Docs, Quality, Naming | Minimally Started  | 10%      |
+| RFC-008 | Optional: Social Auth                 | Not Started        | 0%       |
 
 ---
 
 ## 3. RFC Status Details
 
 ### RFC-001: Project Setup & Tooling
+
 **Status: Mostly Complete (80%)**
 
 #### Implemented
+
 - ✅ Go modules setup with appropriate dependencies (`go.mod`, `go.sum`)
-- ✅ PostgreSQL connection logic (`internal/setup-postgresql/db.go`)
-- ✅ Firebase Admin SDK initialization (`internal/setup-firebase/firebase.go`)
+- ✅ PostgreSQL connection logic (`internal/setup/db.go`)
+- ✅ Firebase Admin SDK initialization (`internal/setup/firebase.go`)
 - ✅ Clean architecture project structure (layers: handler, service, repository)
-- ✅ Initial database schema (`tables/editors.sql`, `tables/newsletters.sql`)
+- ✅ Initial database schema (`tables/editors.sql`, `tables/newsletters.sql`, `tables/posts.sql`)
 - ✅ HTTP server setup with basic routing (`cmd/server/main.go`, `internal/layers/router/router.go`)
 - ✅ Environment variable loading with godotenv
 
 #### Needs Improvement
+
 - ⚠️ No health checking or proper error handling for Firebase initialization
 
 #### Missing
+
 - ❌ CI/CD configuration (GitHub Actions or similar)
 - ❌ Database migration system for applying SQL schemas
 - ❌ Comprehensive README with setup instructions
 - ❌ Tests for basic setup components
 
 #### Next Steps
+
 1. Create a proper migration system for database schemas
 2. Fix environment variable naming for Firebase Web API Key
 3. Add CI/CD configuration
@@ -71,9 +77,11 @@ The codebase shows a solid foundation with clean architecture, proper separation
 ---
 
 ### RFC-002: Editor Auth & Account Management
+
 **Status: Mostly Complete (95%)**
 
 #### Implemented
+
 - ✅ Editor registration via Firebase Auth (`internal/layers/handler/editor/signup.go`)
 - ✅ Editor login via Firebase Auth REST API (`internal/layers/handler/editor/signin.go`)
 - ✅ JWT verification for Firebase tokens (`internal/auth/jwt.go`)
@@ -82,109 +90,129 @@ The codebase shows a solid foundation with clean architecture, proper separation
 - ✅ Password reset flow using Firebase Auth REST API (`internal/layers/handler/editor_password_reset.go`)
 
 #### Needs Improvement
+
 - ⚠️ JWT verification is only applied to newsletter creation, not consistently across all protected endpoints
 - ⚠️ Error handling is basic; could benefit from more detailed error responses
 - ⚠️ No rate limiting or additional security measures for authentication endpoints
 
 #### Missing
+
 - ❌ Middleware for applying JWT verification consistently
 - ❌ Tests for auth flows
 
 #### Next Steps
+
 1. Create a middleware for JWT verification to apply consistently
 2. Improve error handling for authentication endpoints
 3. Add tests for auth flows
 
 ---
 
-### RFC-003: Newsletter CRUD
-**Status: Partially Complete (40%)**
+### RFC-003: Newsletter CRUD & Posts
+
+**Status: Mostly Complete (80%)**
 
 #### Implemented
-- ✅ Create Newsletter with proper JWT auth and editor linkage
-- ✅ List Newsletters (public endpoint, no auth required)
-- ✅ Basic data models and repositories
+
+- ✅ Create Newsletter with proper JWT auth and editor linkage (`POST /api/newsletters`)
+- ✅ List Newsletters by Editor (authenticated, paginated) (`GET /api/newsletters`)
+- ✅ Update/Rename Newsletter functionality with ownership check (`PATCH /api/newsletters/{id}`)
+- ✅ Delete Newsletter functionality with ownership check (`DELETE /api/newsletters/{id}`)
+- ✅ Basic data models and repositories for Newsletters.
+- ✅ Backend service and repository logic for Post CRUD (`CreatePost`, `GetPostByID`, `ListPostsByNewsletter`, `UpdatePost`, `DeletePost` in `NewsletterService`). (Corresponds to `NEWS-005` to `NEWS-008`)
+- ✅ Backend service logic for `MarkPostAsPublished`. (Corresponds to `NEWS-009`)
+- ✅ API Endpoints for Post CRUD (`POST /api/newsletters/{nid}/posts`, `GET /api/newsletters/{nid}/posts`, `GET /api/posts/{id}`, `PUT /api/posts/{id}`, `DELETE /api/posts/{id}`). (Corresponds to `API-POST-001`)
 
 #### Needs Improvement
-- ⚠️ List endpoint doesn't filter by editor (shows all newsletters)
-- ⚠️ Create endpoint has minimal validation
-- ⚠️ Error handling is minimal
+
+- ⚠️ Create endpoint (for newsletters and posts) has minimal validation.
+- ⚠️ Error handling could be more granular for some cases.
 
 #### Missing
-- ❌ Update/Rename Newsletter functionality
-- ❌ Delete Newsletter functionality
-- ❌ Ownership checks for newsletter operations beyond creation
-- ❌ Pagination for list endpoint
-- ❌ Tests for newsletter operations
+
+- ❌ Tests for newsletter update and delete operations.
+- ❌ Tests for all Post CRUD operations and API endpoints.
 
 #### Next Steps
-1. Implement PATCH endpoint for updating newsletter name/description
-2. Implement DELETE endpoint for removing newsletters
-3. Add ownership verification for all operations
-4. Add pagination for list endpoint
-5. Add tests for all CRUD operations
+
+1. Add tests for all Newsletter and Post CRUD operations and API endpoints.
+2. Enhance input validation for create/update operations.
+3. Refine error handling for consistency.
 
 ---
 
 ### RFC-004: Subscriber Management
-**Status: Not Started (0%)**
+
+**Status: Partially Complete (30%)**
 
 #### Implemented
-- None
+
+- ✅ Basic `SubscriberService` with `SubscribeToNewsletter`, `UnsubscribeFromNewsletter`, `ConfirmSubscription` methods.
+- ✅ Basic `SubscriberHandler` for these operations.
+- ✅ Uses an `EmailService` interface for sending confirmation emails (actual email sending via provider is part of RFC-005/MAIL-001).
 
 #### Missing
-- ❌ Firebase Firestore integration for subscribers
-- ❌ Subscribe to newsletter endpoint
-- ❌ Confirmation email functionality
-- ❌ Unsubscribe functionality
-- ❌ Unique link generation for newsletters
-- ❌ Tests for subscriber management
+
+- ❌ Robust Firebase Firestore integration for subscribers (`DB-004`). Current repository might be a placeholder.
+- ❌ Unsubscribe functionality using a unique token (current is by email & newsletterID, `API-SUB-002` specifies token).
+- ❌ Comprehensive tests for subscriber management flows.
 
 #### Next Steps
-1. Set up Firebase Firestore for subscriber data
-2. Implement subscribe endpoint with unique links
-3. Integrate with email service for confirmation emails
-4. Implement unsubscribe functionality
-5. Add tests for subscriber flows
+
+1. Solidify Firebase Firestore integration for subscriber data storage and retrieval.
+2. Implement token-based unsubscription.
+3. Integrate with a chosen email service for robust confirmation email sending (`MAIL-002`).
+4. Add comprehensive tests for all subscriber flows.
 
 ---
 
 ### RFC-005: Publishing & Email Delivery
-**Status: Not Started (0%)**
+
+**Status: Partially Complete (50%)**
 
 #### Implemented
-- None
+
+- ✅ `posts` table schema created in PostgreSQL (`tables/posts.sql`). (Corresponds to `DB-003`)
+- ✅ Backend service and repository logic for Post CRUD (`CreatePost`, `GetPostByID`, `ListPostsByNewsletter`, `UpdatePost`, `DeletePost` in `NewsletterService`). (Corresponds to `NEWS-005` to `NEWS-008`)
+- ✅ Backend service logic for `MarkPostAsPublished`. (Corresponds to `NEWS-009`)
+- ✅ API Endpoints for Post CRUD (`POST /api/newsletters/{nid}/posts`, `GET /api/newsletters/{nid}/posts`, `GET /api/posts/{id}`, `PUT /api/posts/{id}`, `DELETE /api/posts/{id}`). (Corresponds to `API-POST-001`)
 
 #### Missing
-- ❌ Posts table in PostgreSQL
-- ❌ Endpoints for creating/retrieving posts
-- ❌ Email service integration
-- ❌ Email delivery to subscribers
-- ❌ Email templates
-- ❌ Tests for publishing and email delivery
+
+- ❌ Email service integration for sending newsletter issues (`MAIL-001`, `MAIL-003`).
+- ❌ Logic to fetch active subscribers for a newsletter during publishing (`SUB-003`).
+- ❌ Actual email delivery of posts to subscribers.
+- ❌ Email templates for newsletter issues.
+- ❌ API endpoint for publishing a post (`API-PUB-001`).
+- ❌ Tests for the complete publishing flow.
 
 #### Next Steps
-1. Create posts table schema
-2. Implement endpoints for publishing posts
-3. Integrate with chosen email service
-4. Implement email delivery to subscribers
-5. Add tests for publishing flows
+
+1. Integrate with chosen email service (e.g., Resend) for sending newsletter issues (`MAIL-001`, `MAIL-003`).
+2. Implement logic to fetch active subscribers (`SUB-003`).
+3. Create the `/posts/{id}/publish` API endpoint (`API-PUB-001`) that orchestrates fetching post, subscribers, and sending emails.
+4. Develop email templates.
+5. Add tests for the publishing flow.
 
 ---
 
 ### RFC-006: List Subscribers
+
 **Status: Not Started (0%)**
 
 #### Implemented
+
 - None
 
 #### Missing
+
 - ❌ Endpoint for listing subscribers of a newsletter
 - ❌ Authentication and ownership checks
 - ❌ Pagination for potentially large subscriber lists
 - ❌ Tests for subscriber listing
 
 #### Next Steps
+
 1. Implement endpoint for retrieving subscribers
 2. Add proper auth and ownership checks
 3. Implement pagination
@@ -193,18 +221,22 @@ The codebase shows a solid foundation with clean architecture, proper separation
 ---
 
 ### RFC-007: Non-Functional: Docs, Quality, Naming
+
 **Status: Minimally Started (10%)**
 
 #### Implemented
+
 - ✅ Basic code structure follows clean architecture principles
 - ✅ Some naming conventions are followed
 
 #### Needs Improvement
+
 - ⚠️ Inconsistent error handling
 - ⚠️ Minimal logging
 - ⚠️ No structured API responses
 
 #### Missing
+
 - ❌ API documentation (Swagger/OpenAPI)
 - ❌ Comprehensive project documentation
 - ❌ Consistent error handling
@@ -213,6 +245,7 @@ The codebase shows a solid foundation with clean architecture, proper separation
 - ❌ Performance considerations
 
 #### Next Steps
+
 1. Add Swagger/OpenAPI documentation
 2. Improve project documentation
 3. Implement consistent error handling
@@ -222,17 +255,21 @@ The codebase shows a solid foundation with clean architecture, proper separation
 ---
 
 ### RFC-008: Optional: Social Auth
+
 **Status: Not Started (0%)**
 
 #### Implemented
+
 - None
 
 #### Missing
+
 - ❌ Social login integration with Firebase Auth
 - ❌ UI integration for social login (if applicable)
 - ❌ Tests for social authentication
 
 #### Next Steps
+
 1. Integrate social providers with Firebase Auth
 2. Document client-side integration steps
 3. Add tests for social auth flows
@@ -243,26 +280,18 @@ The codebase shows a solid foundation with clean architecture, proper separation
 
 Based on the current state and dependencies between RFCs, the following steps should be prioritized:
 
-1. **Complete RFC-003 (Newsletter CRUD):**
-   - Implement update and delete operations for newsletters
-   - Add proper ownership verification
-   - Add validation and error handling
+1.  **Implement Authentication Middleware (RFC-002, `API-AUTH-002`):**
+    - Create a middleware for consistent JWT verification across all protected API endpoints. This is crucial before extensive frontend integration or exposing more features.
+2.  **Testing for Newsletters & Posts (RFC-003, `TEST-002`, `TEST-005` partially):**
+    - Write comprehensive unit and integration tests for all Newsletter and Post CRUD operations and their API endpoints.
+3.  **Solidify Subscriber Management (RFC-004):**
+    - Ensure robust Firebase Firestore integration for subscriber data.
+    - Implement token-based unsubscription (`API-SUB-002`).
+    - Thoroughly test subscriber flows (`TEST-003`).
+4.  **Implement Publishing Flow Core (RFC-005):**
+    - Integrate an email service like Resend (`MAIL-001`, `MAIL-003`).
+    - Implement the `/posts/{id}/publish` endpoint (`API-PUB-001`) to fetch subscribers and send them the post content.
+5.  **Database Migrations (RFC-001, `PLAT-005`):**
+    - Select and set up a database migration tool.
 
-2. **Begin RFC-004 (Subscriber Management):**
-   - Set up Firebase Firestore integration
-   - Implement subscription and unsubscription flows
-   - Set up email confirmation integration
-
-3. **Improve Authentication (RFC-002):**
-   - Create a middleware for consistent JWT verification
-   - Fix environment variable naming
-   - Document or implement password reset flow
-
-4. **Enhance Project Structure (RFC-001):**
-   - Add database migration system
-   - Improve setup documentation
-   - Set up CI/CD pipeline
-
-The completion of these steps will provide a solid foundation for implementing the remaining RFCs (RFC-005 through RFC-008).
-
-
+The completion of these steps will significantly advance the platform's core functionalities.
