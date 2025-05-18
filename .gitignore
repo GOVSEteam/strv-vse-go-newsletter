@@ -16,6 +16,7 @@
 # IDE files & directories
 .idea/
 .vscode/
+.cursor/
 *.swp
 *~
 *.bak
