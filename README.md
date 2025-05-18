@@ -22,8 +22,6 @@ This service provides the API endpoints for:
 ## Prerequisites
 
 - [Go](https://golang.org/doc/install) (version 1.21 or later)
-- [Docker](https://docs.docker.com/get-docker/) & [Docker Compose](https://docs.docker.com/compose/install/)
-- (Optional) [Task](https://taskfile.dev/installation/) or Make for running scripts
 
 ## Getting Started
 
@@ -95,17 +93,8 @@ The project follows a layered architecture pattern, which separates concerns and
 - **Service**: Contains business logic, orchestrates repositories.
 - **Repository**: Handles data persistence.
 
-## Project Structure
-- `cmd/` — Application entry points (e.g., main.go for starting the server)
-- `internal/layers/router/` — HTTP router setup: configures routes and wires handlers to endpoints
-- `internal/layers/handler/` — HTTP handlers: handle HTTP requests, parse input, and return responses
-- `internal/layers/service/` — Business logic: implements core application logic and orchestrates repositories
-- `internal/layers/repository/` — Data access: manages data storage and retrieval (e.g., in-memory, database)
-- `internal/domain/` — Domain models and entities for the application's core business objects
-- `internal/db/` — Database connection
-
 ## Deployment
-App is running on https://railway.com/ with automatic deployment on repository commit. The production URL is:
+App is running on https://railway.com/. The production URL is:
 
 `strv-vse-go-newsletter-production.up.railway.app`
 
@@ -120,4 +109,4 @@ Or by opening the URL in your browser.
 ## Database
 The application uses **PostgreSQL** as the primary database for storing data. The database connection details are specified in the `.env` file.
 
-Given the size of the project and number of tables, automatic migrations are not implemented. If you want to change database, connect to railway and modify the database schema manually.
+Given the size of the project and number of tables, automatic migrations are not implemented. If you want to change database schema, do that manually from the web administration console or, for more advanced use-cases, by running `railway connect` (you need to have the Railway CLI installed).

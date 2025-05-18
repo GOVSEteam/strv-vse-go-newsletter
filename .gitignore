@@ -35,6 +35,10 @@ configs/*.yml
 configs/*.yaml
 !configs/*.example # Important: Keep example files versioned
 
+# Ignore config secrets
+/.env
+/config/serviceAccountKey.json
+
 # Dependency directories (though Go modules usually handles this)
 # vendor/
 
@@ -47,3 +51,4 @@ coverage.html
 docker-compose.override.yml
 
 # Add any other sensitive files or build artifacts specific to your tools
+
