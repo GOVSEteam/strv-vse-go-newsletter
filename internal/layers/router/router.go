@@ -195,13 +195,14 @@ func Router() http.Handler {
 
 	// TODO: Add API-SUB-003: /newsletters/{id}/subscribers (Protected GET for editors)
 	// This will require auth middleware and integration with newsletterService/editorRepo for ownership check.
-	// mux.HandleFunc("/api/newsletters/{newsletterID}/subscribers", func(w http.ResponseWriter, r *http.Request) {
-	// 	if r.Method == http.MethodGet {
-	// 		// subscriberHandler.GetSubscribersHandler(subscriberService, newsletterService, editorRepo)(w, r) // Placeholder
-	// 	} else {
-	// 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-	// 	}
-	// })
+	mux.HandleFunc("/api/newsletters/{newsletterID}/subscribers", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			// Pass newsletterRepo for ownership check and editorRepo for getting editor ID from JWT
+			subscriberHandler.GetSubscribersHandler(subscriberService, newsletterRepo, editorRepo)(w, r)
+		} else {
+			http.Error(w, "Method not allowed for /api/newsletters/{newsletterID}/subscribers", http.StatusMethodNotAllowed)
+		}
+	})
 
 
 	return mux
