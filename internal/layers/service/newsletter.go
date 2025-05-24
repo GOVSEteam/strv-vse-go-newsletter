@@ -33,6 +33,7 @@ type NewsletterServiceInterface interface {
 	UpdatePost(ctx context.Context, editorFirebaseUID string, postID uuid.UUID, title *string, content *string) (*models.Post, error)
 	DeletePost(ctx context.Context, editorFirebaseUID string, postID uuid.UUID) error
 	MarkPostAsPublished(ctx context.Context, editorFirebaseUID string, postID uuid.UUID) error
+	GetPostForPublishing(ctx context.Context, postID uuid.UUID, editorFirebaseUID string) (*models.Post, error) // New method
 }
 
 type newsletterService struct {
@@ -256,6 +257,44 @@ func (s *newsletterService) DeletePost(ctx context.Context, editorFirebaseUID st
 		return fmt.Errorf("failed to delete post: %w", err)
 	}
 	return nil
+}
+
+// GetPostForPublishing retrieves a post for publishing, checking ownership and if it's already published.
+func (s *newsletterService) GetPostForPublishing(ctx context.Context, postID uuid.UUID, editorFirebaseUID string) (*models.Post, error) {
+	post, err := s.postRepo.GetPostByID(ctx, postID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrPostNotFound
+		}
+		return nil, fmt.Errorf("failed to get post for publishing: %w", err)
+	}
+	if post == nil { // Should be caught by sql.ErrNoRows
+		return nil, ErrPostNotFound
+	}
+
+	// Check ownership
+	_, err = s.checkOwnership(ctx, editorFirebaseUID, post.NewsletterID)
+	if err != nil {
+		return nil, err // ErrForbidden or other error from checkOwnership
+	}
+
+	// Check if already published
+	if post.PublishedAt != nil && !post.PublishedAt.IsZero() {
+		return nil, errors.New("post is already published")
+	}
+
+	// Ensure all necessary fields are present for publishing
+	if post.Title == "" || post.Content == "" || post.NewsletterID == uuid.Nil {
+		return nil, errors.New("post is missing title, content, or newsletter ID for publishing")
+	}
+	// The `Content` field in `models.Post` is used as `Body` in `PublishingService`. Let's ensure it's consistent.
+	// If `models.Post` has `Content` and `PublishingService` expects `Body`, we need to align.
+	// Assuming `models.Post` has `Content` and `Title` and `NewsletterID`.
+	// The `PublishingService` uses `post.Title` and `post.Body`.
+	// Let's assume `models.Post` has `Content` and we'll use that.
+	// The `PublishingService` will need to use `post.Content` instead of `post.Body`.
+
+	return post, nil
 }
 
 func (s *newsletterService) MarkPostAsPublished(ctx context.Context, editorFirebaseUID string, postID uuid.UUID) error {

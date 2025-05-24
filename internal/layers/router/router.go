@@ -3,11 +3,16 @@ package router
 import (
 	"net/http"
 
+	"log"
+	"os"
+
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/editor"
 	newsletterHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/newsletter" // Import specific newsletter handlers
 	postHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/post"             // Import post handlers
+	subscriberHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/subscriber"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/pkg/email" // Added email package
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/setup"
 )
 
@@ -24,6 +29,33 @@ func Router() http.Handler {
 	
 	// Update NewsletterService instantiation
 	newsletterService := service.NewNewsletterService(newsletterRepo, postRepo, editorRepo)
+
+	// Initialize EmailService
+	var emailSvc email.EmailService
+	var err error
+	if os.Getenv("RESEND_API_KEY") != "" {
+		emailSvc, err = email.NewResendService()
+		if err != nil {
+			log.Fatalf("Error initializing Resend email service: %v", err)
+		}
+		log.Println("Using Resend email service")
+	} else {
+		emailSvc = email.NewConsoleEmailService()
+		log.Println("Using Console email service (RESEND_API_KEY not set)")
+	}
+
+	// Initialize Firebase client for SubscriberRepository
+	firestoreClient := setup.GetFirestoreClient() // Use the existing getter
+	if firestoreClient == nil { // Should not happen if GetFirestoreClient initializes
+		log.Fatal("Failed to get Firestore client")
+	}
+	subscriberRepo := repository.NewFirestoreSubscriberRepository(firestoreClient)
+
+	// Initialize SubscriberService
+	subscriberService := service.NewSubscriberService(subscriberRepo, newsletterRepo, emailSvc)
+
+	// Initialize PublishingService
+	publishingService := service.NewPublishingService(newsletterService, subscriberService, emailSvc)
 
 
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -125,5 +157,65 @@ func Router() http.Handler {
 			http.Error(w, "Method not allowed for /api/posts/{postID}", http.StatusMethodNotAllowed)
 		}
 	})
+
+	// Publish post route
+	mux.HandleFunc("/api/posts/{postID}/publish", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			postHandler.PublishPostHandler(publishingService, editorRepo)(w, r)
+		} else {
+			http.Error(w, "Method not allowed for /api/posts/{postID}/publish", http.StatusMethodNotAllowed)
+		}
+	})
+
+	// Subscriber routes
+	// POST /api/newsletters/{id}/subscribe
+	mux.HandleFunc("/api/newsletters/{newsletterID}/subscribe", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			subscriberHandler.SubscribeHandler(subscriberService)(w, r)
+		} else {
+			http.Error(w, "Method not allowed for /api/newsletters/{newsletterID}/subscribe", http.StatusMethodNotAllowed)
+		}
+	})
+
+	// GET /api/subscriptions/unsubscribe?token={token}
+	mux.HandleFunc("/api/subscriptions/unsubscribe", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			subscriberHandler.UnsubscribeHandler(subscriberService)(w, r)
+		} else {
+			http.Error(w, "Method not allowed for /api/subscriptions/unsubscribe", http.StatusMethodNotAllowed)
+		}
+	})
+	
+	// POST /api/subscribers/confirm?token={token} - This is usually a GET, but current service expects POST-like ConfirmSubscriptionRequest
+	// For consistency with how ConfirmSubscription is implemented (taking a request body implicitly via JSON unmarshal),
+	// we might keep it as POST or refactor ConfirmSubscription to take token from query param.
+	// The service method `ConfirmSubscription` takes `ConfirmSubscriptionRequest` which has a `Token` field.
+	// A GET request would typically pass this in the query string.
+	// Let's assume the handler will manage extracting it from query for a GET.
+	// Or, if the client is expected to send a POST with JSON body `{"token": "value"}`, then POST is fine.
+	// The current service method `SubscribeToNewsletter` generates a link like:
+	// "http://localhost:8080/api/subscribers/confirm?token=" + confirmationToken
+	// This implies a GET request where the token is a query parameter.
+	mux.HandleFunc("/api/subscribers/confirm", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet { // Changed to GET to match typical confirmation link pattern
+			subscriberHandler.ConfirmSubscriptionHandler(subscriberService)(w, r)
+		} else {
+			http.Error(w, "Method not allowed for /api/subscribers/confirm", http.StatusMethodNotAllowed)
+		}
+	})
+
+
+	// TODO: Add API-SUB-003: /newsletters/{id}/subscribers (Protected GET for editors)
+	// This will require auth middleware and integration with newsletterService/editorRepo for ownership check.
+	mux.HandleFunc("/api/newsletters/{newsletterID}/subscribers", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			// Pass newsletterRepo for ownership check and editorRepo for getting editor ID from JWT
+			subscriberHandler.GetSubscribersHandler(subscriberService, newsletterRepo, editorRepo)(w, r)
+		} else {
+			http.Error(w, "Method not allowed for /api/newsletters/{newsletterID}/subscribers", http.StatusMethodNotAllowed)
+		}
+	})
+
+
 	return mux
 }

@@ -25,8 +25,10 @@ var ErrAlreadyConfirmed = errors.New("subscription is already confirmed")
 
 type SubscriberServiceInterface interface {
 	SubscribeToNewsletter(ctx context.Context, req SubscribeToNewsletterRequest) (*SubscribeToNewsletterResponse, error)
-	UnsubscribeFromNewsletter(ctx context.Context, req UnsubscribeFromNewsletterRequest) error
+	UnsubscribeFromNewsletter(ctx context.Context, req UnsubscribeFromNewsletterRequest) error // Will likely be deprecated
+	UnsubscribeByToken(ctx context.Context, token string) error
 	ConfirmSubscription(ctx context.Context, req ConfirmSubscriptionRequest) error
+	GetActiveSubscribersForNewsletter(ctx context.Context, newsletterID string) ([]models.Subscriber, error) // Added for SUB-003
 }
 
 // SubscriberService handles business logic for subscriber management.
@@ -98,6 +100,7 @@ func (s *SubscriberService) SubscribeToNewsletter(ctx context.Context, req Subsc
 		Status:            models.SubscriberStatusPendingConfirmation,
 		ConfirmationToken: confirmationToken,
 		TokenExpiryTime:   time.Now().UTC().Add(tokenExpiryDuration),
+		UnsubscribeToken:  uuid.NewString(), // Generate unsubscribe token
 	}
 
 	subscriberID, err := s.subscriberRepo.CreateSubscriber(ctx, subscriber)
@@ -123,6 +126,10 @@ func (s *SubscriberService) SubscribeToNewsletter(ctx context.Context, req Subsc
 		// For this example, we proceed, as the subscriber is created.
 	}
 
+	// TODO: Send an email containing the unsubscribe link with subscriber.UnsubscribeToken
+	// For example: unsubscribeLink := "http://localhost:8080/api/subscriptions/unsubscribe?token=" + subscriber.UnsubscribeToken
+	// This link should be part of all emails sent to the subscriber (confirmation, newsletter issues).
+
 	return &SubscribeToNewsletterResponse{
 		SubscriberID: subscriberID,
 		Email:        subscriber.Email,
@@ -137,55 +144,62 @@ type UnsubscribeFromNewsletterRequest struct {
 	NewsletterID string
 }
 
-// UnsubscribeFromNewsletter processes an unsubscription request.
+// UnsubscribeFromNewsletter processes an unsubscription request. (DEPRECATED in favor of UnsubscribeByToken)
 // It updates the subscriber's status to Unsubscribed.
 func (s *SubscriberService) UnsubscribeFromNewsletter(ctx context.Context, req UnsubscribeFromNewsletterRequest) error {
+	// This method is kept for now but should be replaced by token-based unsubscription.
+	// It's functionality is effectively replaced by UnsubscribeByToken.
+	// Consider removing it in a future refactor if no longer called.
 	if req.Email == "" {
-		return errors.New("email cannot be empty")
+		return errors.New("email cannot be empty (deprecated method)")
 	}
 	if req.NewsletterID == "" {
-		return errors.New("newsletter ID cannot be empty")
+		return errors.New("newsletter ID cannot be empty (deprecated method)")
 	}
 
-	// Check if the newsletter itself exists. While not strictly necessary for unsubscription
-	// (one might want to unsubscribe even if a newsletter was deleted),
-	// it can prevent attempts to unsubscribe from non-existent entities if that's desired behavior.
-	// For now, we'll skip this to allow unsubscription even if a newsletter is deleted.
-	// newsletter, err := s.newsletterRepo.GetNewsletterByID(req.NewsletterID)
-	// if err != nil {
-	// 	return err // DB error
-	// }
-	// if newsletter == nil {
-	// 	return ErrNewsletterNotFound // or a different error like "cannot unsubscribe from non-existent newsletter"
-	// }
-
-	// Find the subscriber record to get its ID
 	existingSub, err := s.subscriberRepo.GetSubscriberByEmailAndNewsletterID(ctx, req.Email, req.NewsletterID)
 	if err != nil {
-		// This is a server-side error (e.g., DB connection)
 		return err
 	}
 	if existingSub == nil {
 		return ErrSubscriptionNotFound
 	}
-
-	// If already unsubscribed, we can consider it a success or a specific no-op response.
-	// For simplicity, we'll proceed with the update, which is idempotent for status.
 	if existingSub.Status == models.SubscriberStatusUnsubscribed {
-		return nil // Already unsubscribed, no action needed
+		return nil // Already unsubscribed
+	}
+	return s.subscriberRepo.UpdateSubscriberStatus(ctx, existingSub.ID, models.SubscriberStatusUnsubscribed)
+}
+
+// UnsubscribeByToken processes an unsubscription request using a token.
+func (s *SubscriberService) UnsubscribeByToken(ctx context.Context, token string) error {
+	if token == "" {
+		return errors.New("unsubscribe token cannot be empty")
 	}
 
-	err = s.subscriberRepo.UpdateSubscriberStatus(ctx, existingSub.ID, models.SubscriberStatusUnsubscribed)
+	subscriber, err := s.subscriberRepo.GetSubscriberByUnsubscribeToken(ctx, token)
 	if err != nil {
-		// Handle potential errors from the update operation, e.g., the subscriber was deleted
-		// between the Get and Update calls, though UpdateSubscriberStatus already checks for NotFound.
-		return err // Propagate repository error
+		// This is a server-side error from the repository
+		return fmt.Errorf("error retrieving subscriber by unsubscribe token: %w", err)
+	}
+	if subscriber == nil {
+		return ErrInvalidOrExpiredToken // Using this error for simplicity, could be a more specific "unsubscribe token not found"
+	}
+
+	if subscriber.Status == models.SubscriberStatusUnsubscribed {
+		return nil // Already unsubscribed
+	}
+
+	// TODO: Optionally, clear the unsubscribe token after use or mark it as used if it's single-use.
+	// For now, we just update the status.
+	err = s.subscriberRepo.UpdateSubscriberStatus(ctx, subscriber.ID, models.SubscriberStatusUnsubscribed)
+	if err != nil {
+		return fmt.Errorf("failed to update subscriber status for unsubscription: %w", err)
 	}
 
 	// TODO: Optionally, send an unsubscription confirmation email.
-
 	return nil
 }
+
 
 // ConfirmSubscriptionRequest defines the input for confirming a subscription.
 type ConfirmSubscriptionRequest struct {
@@ -228,6 +242,31 @@ func (s *SubscriberService) ConfirmSubscription(ctx context.Context, req Confirm
 	}
 
 	// TODO: Optionally, send a "Welcome" or "Subscription Confirmed" email.
+	// This email should also contain the unsubscribe link.
 
 	return nil
+}
+
+// GetActiveSubscribersForNewsletter retrieves all active subscribers for a given newsletter.
+func (s *SubscriberService) GetActiveSubscribersForNewsletter(ctx context.Context, newsletterID string) ([]models.Subscriber, error) {
+	if newsletterID == "" {
+		return nil, errors.New("newsletter ID cannot be empty")
+	}
+
+	// First, check if the newsletter exists to avoid querying for subscribers of a non-existent newsletter.
+	// This is optional but good practice.
+	newsletter, err := s.newsletterRepo.GetNewsletterByID(newsletterID)
+	if err != nil {
+		// This could be a DB error or other issue fetching the newsletter.
+		return nil, fmt.Errorf("error checking newsletter existence: %w", err)
+	}
+	if newsletter == nil {
+		return nil, ErrNewsletterNotFound // Or a more specific error.
+	}
+
+	subscribers, err := s.subscriberRepo.GetActiveSubscribersByNewsletterID(ctx, newsletterID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active subscribers: %w", err)
+	}
+	return subscribers, nil
 }

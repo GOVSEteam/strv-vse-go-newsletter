@@ -135,6 +135,14 @@ func (m *MockNewsletterService) MarkPostAsPublished(ctx context.Context, editorF
 	return args.Error(0)
 }
 
+func (m *MockNewsletterService) GetPostForPublishing(ctx context.Context, postID uuid.UUID, editorFirebaseUID string) (*models.Post, error) {
+	args := m.Called(ctx, postID, editorFirebaseUID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Post), args.Error(1)
+}
+
 func TestCreateHandler(t *testing.T) {
 	// Store original and defer reset
 	originalVerifyJWT := auth.VerifyFirebaseJWT
