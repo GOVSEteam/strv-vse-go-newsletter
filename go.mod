@@ -1,6 +1,8 @@
 module github.com/GOVSEteam/strv-vse-go-newsletter
 
-go 1.22.2
+go 1.23
+
+toolchain go1.24.2
 
 require (
 	cloud.google.com/go/firestore v1.18.0
@@ -43,6 +45,7 @@ require (
 	github.com/googleapis/gax-go/v2 v2.14.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/resend/resend-go/v2 v2.20.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	go.opentelemetry.io/contrib/detectors/gcp v1.29.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.54.0 // indirect

@@ -49,6 +49,22 @@ func (m *MockSubscriberRepository) ConfirmSubscriber(ctx context.Context, subscr
 	return args.Error(0)
 }
 
+func (m *MockSubscriberRepository) GetSubscriberByUnsubscribeToken(ctx context.Context, token string) (*models.Subscriber, error) {
+	args := m.Called(ctx, token)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Subscriber), args.Error(1)
+}
+
+func (m *MockSubscriberRepository) GetActiveSubscribersByNewsletterID(ctx context.Context, newsletterID string) ([]models.Subscriber, error) {
+	args := m.Called(ctx, newsletterID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.Subscriber), args.Error(1)
+}
+
 // MockNewsletterRepository is a mock implementation of NewsletterRepository
 type MockNewsletterRepository struct {
 	mock.Mock
@@ -305,6 +321,11 @@ type MockEmailService struct {
 
 func (m *MockEmailService) SendConfirmationEmail(toEmail, recipientName, confirmationLink string) error {
 	args := m.Called(toEmail, recipientName, confirmationLink)
+	return args.Error(0)
+}
+
+func (m *MockEmailService) SendNewsletterIssue(toEmail, recipientName, subject, htmlContent string) error {
+	args := m.Called(toEmail, recipientName, subject, htmlContent)
 	return args.Error(0)
 }
 

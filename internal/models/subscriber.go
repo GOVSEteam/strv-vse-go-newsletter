@@ -23,6 +23,7 @@ type Subscriber struct {
 	Status             SubscriberStatus `json:"status" firestore:"status"`                         // Status of the subscription
 	ConfirmationToken  string           `json:"-" firestore:"confirmation_token,omitempty"`      // Token for email confirmation (omit from JSON responses)
 	TokenExpiryTime    time.Time        `json:"-" firestore:"token_expiry_time,omitempty"`   // Expiry time for the confirmation token
+	UnsubscribeToken   string           `json:"-" firestore:"unsubscribe_token,omitempty"`     // Token for one-click unsubscribe (omit from JSON)
 	ConfirmedAt        *time.Time       `json:"confirmed_at,omitempty" firestore:"confirmed_at,omitempty"` // Timestamp of email confirmation
 	// UnsubscribedAt    *time.Time     `json:"unsubscribed_at,omitempty" firestore:"unsubscribed_at,omitempty"` // Using status field primarily
-} 
+}

@@ -5,6 +5,7 @@ import "log"
 // EmailService defines an interface for sending emails.
 type EmailService interface {
 	SendConfirmationEmail(toEmail, recipientName, confirmationLink string) error
+	SendNewsletterIssue(toEmail, recipientName, subject, htmlContent string) error
 	// Potentially other email types later, e.g.:
 	// SendNewsletter(toEmail string, subject string, htmlBody string, textBody string) error
 }
@@ -27,4 +28,15 @@ func (s *ConsoleEmailService) SendConfirmationEmail(toEmail, recipientName, conf
 	log.Printf("Body (template placeholder):\nHi %s,\n\nPlease confirm your subscription by clicking the link below:\n%s\n\nThanks!", recipientName, confirmationLink)
 	log.Printf("---- END OF EMAIL (CONSOLE MOCK) ----")
 	return nil // Simulate successful send
-} 
+}
+
+// SendNewsletterIssue logs the newsletter issue email details to the console.
+func (s *ConsoleEmailService) SendNewsletterIssue(toEmail, recipientName, subject, htmlContent string) error {
+	log.Printf("---- SENDING NEWSLETTER ISSUE (CONSOLE MOCK) ----")
+	log.Printf("To: %s", toEmail)
+	log.Printf("Recipient Name: %s", recipientName)
+	log.Printf("Subject: %s", subject)
+	log.Printf("HTML Content:\n%s", htmlContent)
+	log.Printf("---- END OF EMAIL (CONSOLE MOCK) ----")
+	return nil // Simulate successful send
+}

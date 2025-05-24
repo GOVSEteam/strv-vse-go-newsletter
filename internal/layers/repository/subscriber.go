@@ -1,13 +1,14 @@
 package repository
 
 import (
-	"cloud.google.com/go/firestore"
 	"context"
+	"time"
+
+	"cloud.google.com/go/firestore"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models" // Assuming this path is correct
-	"google.golang.org/api/iterator" // For checking iterator.Done
+	"google.golang.org/api/iterator"                              // For checking iterator.Done
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"time"
 )
 
 const subscribersCollection = "subscribers"
@@ -19,6 +20,8 @@ type SubscriberRepository interface {
 	UpdateSubscriberStatus(ctx context.Context, subscriberID string, status models.SubscriberStatus) error
 	GetSubscriberByConfirmationToken(ctx context.Context, token string) (*models.Subscriber, error)
 	ConfirmSubscriber(ctx context.Context, subscriberID string, confirmationTime time.Time) error
+	GetSubscriberByUnsubscribeToken(ctx context.Context, token string) (*models.Subscriber, error)                 // New method
+	GetActiveSubscribersByNewsletterID(ctx context.Context, newsletterID string) ([]models.Subscriber, error) // New method
 	// TODO: Add IsSubscribed(ctx context.Context, email, newsletterID string) (bool, error)
 }
 
@@ -106,6 +109,64 @@ func (r *firestoreSubscriberRepository) UpdateSubscriberStatus(ctx context.Conte
 	return nil
 }
 
+// GetSubscriberByUnsubscribeToken retrieves a subscriber by their unsubscribe token.
+// Returns (nil, nil) if not found.
+func (r *firestoreSubscriberRepository) GetSubscriberByUnsubscribeToken(ctx context.Context, token string) (*models.Subscriber, error) {
+	iter := r.client.Collection(subscribersCollection).
+		Where("unsubscribe_token", "==", token).
+		Limit(1).
+		Documents(ctx)
+
+	defer iter.Stop()
+
+	doc, err := iter.Next()
+	if err == iterator.Done {
+		return nil, nil // Not found
+	}
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to query Firestore for subscriber by unsubscribe token: %v", err)
+	}
+
+	var subscriber models.Subscriber
+	if err := doc.DataTo(&subscriber); err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to decode subscriber data by unsubscribe token: %v", err)
+	}
+	subscriber.ID = doc.Ref.ID
+	return &subscriber, nil
+}
+
+// GetActiveSubscribersByNewsletterID retrieves all active subscribers for a specific newsletter ID.
+func (r *firestoreSubscriberRepository) GetActiveSubscribersByNewsletterID(ctx context.Context, newsletterID string) ([]models.Subscriber, error) {
+	var subscribers []models.Subscriber
+	iter := r.client.Collection(subscribersCollection).
+		Where("newsletter_id", "==", newsletterID).
+		Where("status", "==", models.SubscriberStatusActive). // Only active subscribers
+		Documents(ctx)
+
+	defer iter.Stop()
+
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to iterate active subscribers: %v", err)
+		}
+
+		var sub models.Subscriber
+		if err := doc.DataTo(&sub); err != nil {
+			// Log or handle individual decoding errors, but continue if possible
+			// For now, we'll return an error on the first decode failure.
+			return nil, status.Errorf(codes.Internal, "failed to decode active subscriber data: %v", err)
+		}
+		sub.ID = doc.Ref.ID
+		subscribers = append(subscribers, sub)
+	}
+
+	return subscribers, nil
+}
+
 // GetSubscriberByConfirmationToken retrieves a subscriber by their confirmation token.
 // Returns (nil, nil) if not found.
 func (r *firestoreSubscriberRepository) GetSubscriberByConfirmationToken(ctx context.Context, token string) (*models.Subscriber, error) {
@@ -150,4 +211,4 @@ func (r *firestoreSubscriberRepository) ConfirmSubscriber(ctx context.Context, s
 		return status.Errorf(codes.Internal, "failed to confirm subscriber in Firestore: %v", err)
 	}
 	return nil
-} 
+}
