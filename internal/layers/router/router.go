@@ -54,6 +54,9 @@ func Router() http.Handler {
 	// Initialize SubscriberService
 	subscriberService := service.NewSubscriberService(subscriberRepo, newsletterRepo, emailSvc)
 
+	// Initialize PublishingService
+	publishingService := service.NewPublishingService(newsletterService, subscriberService, emailSvc)
+
 
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -152,6 +155,15 @@ func Router() http.Handler {
 			postHandler.DeletePostHandler(newsletterService)(w, r)
 		default:
 			http.Error(w, "Method not allowed for /api/posts/{postID}", http.StatusMethodNotAllowed)
+		}
+	})
+
+	// Publish post route
+	mux.HandleFunc("/api/posts/{postID}/publish", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			postHandler.PublishPostHandler(publishingService, editorRepo)(w, r)
+		} else {
+			http.Error(w, "Method not allowed for /api/posts/{postID}/publish", http.StatusMethodNotAllowed)
 		}
 	})
 

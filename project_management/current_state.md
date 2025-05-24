@@ -27,16 +27,16 @@ The codebase shows a solid foundation with clean architecture, proper separation
 
 ## 2. Implementation Status Summary
 
-| RFC ID  | Title                                 | Status             | Progress |
-| ------- | ------------------------------------- | ------------------ | -------- |
-| RFC-001 | Project Setup & Tooling               | Mostly Complete    | 80%      |
-| RFC-002 | Editor Auth & Account Management      | Mostly Complete    | 95%      |
-| RFC-003 | Newsletter CRUD & Posts               | Mostly Complete    | 80%      |
-| RFC-004 | Subscriber Management                 | Partially Complete | 30%      |
-| RFC-005 | Publishing & Email Delivery           | Partially Complete | 50%      |
-| RFC-006 | List Subscribers                      | Not Started        | 0%       |
-| RFC-007 | Non-Functional: Docs, Quality, Naming | Minimally Started  | 10%      |
-| RFC-008 | Optional: Social Auth                 | Not Started        | 0%       |
+| RFC ID  | Title                                 | Status            | Progress |
+| ------- | ------------------------------------- | ----------------- | -------- |
+| RFC-001 | Project Setup & Tooling               | Mostly Complete   | 80%      |
+| RFC-002 | Editor Auth & Account Management      | Mostly Complete   | 95%      |
+| RFC-003 | Newsletter CRUD & Posts               | Mostly Complete   | 80%      |
+| RFC-004 | Subscriber Management                 | Mostly Complete   | 90%      |
+| RFC-005 | Publishing & Email Delivery           | Mostly Complete   | 90%      |
+| RFC-006 | List Subscribers                      | Complete          | 100%     |
+| RFC-007 | Non-Functional: Docs, Quality, Naming | Minimally Started | 10%      |
+| RFC-008 | Optional: Social Auth                 | Not Started       | 0%       |
 
 ---
 
@@ -143,80 +143,89 @@ The codebase shows a solid foundation with clean architecture, proper separation
 
 ### RFC-004: Subscriber Management
 
-**Status: Partially Complete (30%)**
+**Status: Mostly Complete (90%)**
 
 #### Implemented
 
-- ✅ Basic `SubscriberService` with `SubscribeToNewsletter`, `UnsubscribeFromNewsletter`, `ConfirmSubscription` methods.
-- ✅ Basic `SubscriberHandler` for these operations.
-- ✅ Uses an `EmailService` interface for sending confirmation emails (actual email sending via provider is part of RFC-005/MAIL-001).
+- ✅ `SubscriberService` with `SubscribeToNewsletter`, `ConfirmSubscription`, `UnsubscribeByToken`, and `GetActiveSubscribersForNewsletter` methods.
+- ✅ `SubscriberRepository` (Firestore implementation) for subscriber data persistence, including methods for token-based operations and fetching active subscribers (`DB-004`).
+- ✅ `models.Subscriber` updated with `UnsubscribeToken`.
+- ✅ `SubscribeToNewsletter` flow generates unique `confirmation_token` and `unsubscribe_token`.
+- ✅ Handlers for all subscriber operations:
+  - `POST /api/newsletters/{id}/subscribe` (`API-SUB-001`, `subscriberHandler.SubscribeHandler`)
+  - `GET /api/subscribers/confirm?token={token}` (`subscriberHandler.ConfirmSubscriptionHandler`)
+  - `GET /api/subscriptions/unsubscribe?token={token}` (`API-SUB-002`, `subscriberHandler.UnsubscribeHandler`)
+- ✅ Token-based unsubscription implemented.
+- ✅ Integration with `EmailService` for sending confirmation emails (`MAIL-002` via `ResendService` or `ConsoleEmailService`).
 
 #### Missing
 
-- ❌ Robust Firebase Firestore integration for subscribers (`DB-004`). Current repository might be a placeholder.
-- ❌ Unsubscribe functionality using a unique token (current is by email & newsletterID, `API-SUB-002` specifies token).
-- ❌ Comprehensive tests for subscriber management flows.
+- ❌ Comprehensive unit and integration tests for all subscriber management flows and handlers (`TEST-003`).
 
 #### Next Steps
 
-1. Solidify Firebase Firestore integration for subscriber data storage and retrieval.
-2. Implement token-based unsubscription.
-3. Integrate with a chosen email service for robust confirmation email sending (`MAIL-002`).
-4. Add comprehensive tests for all subscriber flows.
+1. Add comprehensive tests for all subscriber flows (service, repository, handlers).
+2. Ensure unsubscribe link from confirmation email (and future newsletter emails) is correctly constructed and functional. (Partially done, link is generated, needs to be added to confirmation email template).
 
 ---
 
 ### RFC-005: Publishing & Email Delivery
 
-**Status: Partially Complete (50%)**
+**Status: Mostly Complete (90%)**
 
 #### Implemented
 
-- ✅ `posts` table schema created in PostgreSQL (`tables/posts.sql`). (Corresponds to `DB-003`)
-- ✅ Backend service and repository logic for Post CRUD (`CreatePost`, `GetPostByID`, `ListPostsByNewsletter`, `UpdatePost`, `DeletePost` in `NewsletterService`). (Corresponds to `NEWS-005` to `NEWS-008`)
-- ✅ Backend service logic for `MarkPostAsPublished`. (Corresponds to `NEWS-009`)
-- ✅ API Endpoints for Post CRUD (`POST /api/newsletters/{nid}/posts`, `GET /api/newsletters/{nid}/posts`, `GET /api/posts/{id}`, `PUT /api/posts/{id}`, `DELETE /api/posts/{id}`). (Corresponds to `API-POST-001`)
+- ✅ `posts` table schema created in PostgreSQL (`tables/posts.sql`). (`DB-003`)
+- ✅ Backend service and repository logic for Post CRUD and `MarkPostAsPublished` in `NewsletterService`. (`NEWS-005` to `NEWS-009`)
+- ✅ API Endpoints for Post CRUD. (`API-POST-001`)
+- ✅ Resend SDK integrated for email sending (`MAIL-001`).
+- ✅ `EmailService` interface extended for `SendNewsletterIssue`, implemented by `ResendService` and `ConsoleEmailService` (`MAIL-003`).
+- ✅ `SubscriberService.GetActiveSubscribersForNewsletter` implemented (`SUB-003`).
+- ✅ New `PublishingService` created to orchestrate publishing:
+  - Fetches post details (via `NewsletterService.GetPostForPublishing` - new method).
+  - Fetches active subscribers (via `SubscriberService`).
+  - Generates unique unsubscribe links for each subscriber.
+  - Sends emails to subscribers using `EmailService.SendNewsletterIssue`.
+  - Marks post as published (via `NewsletterService.MarkPostAsPublished`).
+- ✅ API endpoint `POST /api/posts/{id}/publish` implemented (`API-PUB-001`).
+- ✅ Basic HTML email structure in `ResendService` includes post content and unsubscribe link.
 
 #### Missing
 
-- ❌ Email service integration for sending newsletter issues (`MAIL-001`, `MAIL-003`).
-- ❌ Logic to fetch active subscribers for a newsletter during publishing (`SUB-003`).
-- ❌ Actual email delivery of posts to subscribers.
-- ❌ Email templates for newsletter issues.
-- ❌ API endpoint for publishing a post (`API-PUB-001`).
-- ❌ Tests for the complete publishing flow.
+- ❌ Sophisticated HTML email templates for newsletter issues.
+- ❌ Robust asynchronous email sending for scalability (currently synchronous).
+- ❌ Advanced error handling and monitoring for email delivery (e.g., bounces, Resend webhooks).
+- ❌ Comprehensive tests for the complete publishing flow (`TEST-004`).
 
 #### Next Steps
 
-1. Integrate with chosen email service (e.g., Resend) for sending newsletter issues (`MAIL-001`, `MAIL-003`).
-2. Implement logic to fetch active subscribers (`SUB-003`).
-3. Create the `/posts/{id}/publish` API endpoint (`API-PUB-001`) that orchestrates fetching post, subscribers, and sending emails.
-4. Develop email templates.
-5. Add tests for the publishing flow.
+1. Develop proper HTML email templates for newsletter issues.
+2. Implement/Investigate asynchronous email sending mechanisms.
+3. Add comprehensive tests for the publishing flow (service, handler).
+4. Enhance email delivery error handling and monitoring.
 
 ---
 
 ### RFC-006: List Subscribers
 
-**Status: Not Started (0%)**
+**Status: Complete (100%)**
 
 #### Implemented
 
-- None
+- ✅ Endpoint `GET /api/newsletters/{id}/subscribers` for listing active subscribers of a newsletter (`API-SUB-003`).
+- ✅ Handler `GetSubscribersHandler` created.
+- ✅ Authentication (JWT) and authorization (editor ownership of the newsletter) checks implemented within the handler.
+- ✅ Uses `SubscriberService.GetActiveSubscribersForNewsletter` to fetch data.
 
 #### Missing
 
-- ❌ Endpoint for listing subscribers of a newsletter
-- ❌ Authentication and ownership checks
-- ❌ Pagination for potentially large subscriber lists
-- ❌ Tests for subscriber listing
+- ⚠️ Pagination for subscriber list (currently returns all active subscribers).
+- ❌ Tests for the subscriber listing endpoint and handler.
 
 #### Next Steps
 
-1. Implement endpoint for retrieving subscribers
-2. Add proper auth and ownership checks
-3. Implement pagination
-4. Add tests
+1. Implement pagination for the subscriber listing endpoint.
+2. Add tests for the subscriber listing functionality.
 
 ---
 
@@ -278,20 +287,26 @@ The codebase shows a solid foundation with clean architecture, proper separation
 
 ## 4. Next Priority Steps
 
-Based on the current state and dependencies between RFCs, the following steps should be prioritized:
+With core subscriber and publishing flows largely in place, priorities shift towards robustness, testing, and usability:
 
 1.  **Implement Authentication Middleware (RFC-002, `API-AUTH-002`):**
-    - Create a middleware for consistent JWT verification across all protected API endpoints. This is crucial before extensive frontend integration or exposing more features.
-2.  **Testing for Newsletters & Posts (RFC-003, `TEST-002`, `TEST-005` partially):**
-    - Write comprehensive unit and integration tests for all Newsletter and Post CRUD operations and their API endpoints.
-3.  **Solidify Subscriber Management (RFC-004):**
-    - Ensure robust Firebase Firestore integration for subscriber data.
-    - Implement token-based unsubscription (`API-SUB-002`).
-    - Thoroughly test subscriber flows (`TEST-003`).
-4.  **Implement Publishing Flow Core (RFC-005):**
-    - Integrate an email service like Resend (`MAIL-001`, `MAIL-003`).
-    - Implement the `/posts/{id}/publish` endpoint (`API-PUB-001`) to fetch subscribers and send them the post content.
+    - Create a middleware for consistent JWT verification across all protected API endpoints. This is crucial for security and cleaner handler logic.
+2.  **Comprehensive Testing (RFC-003, RFC-004, RFC-005, RFC-006):**
+    - Write unit and integration tests for:
+      - Newsletter and Post CRUD operations.
+      - All subscriber management flows (subscribe, confirm, unsubscribe, list subscribers).
+      - The complete publishing flow.
+3.  **Email Enhancements (RFC-005):**
+    - Develop proper HTML email templates for newsletter issues.
+    - Investigate and implement asynchronous email sending for better performance.
+4.  **Pagination for List Endpoints (RFC-006, RFC-003):**
+    - Implement pagination for listing subscribers.
+    - Review and implement pagination for listing newsletters and posts if not already robust.
 5.  **Database Migrations (RFC-001, `PLAT-005`):**
-    - Select and set up a database migration tool.
+    - Select and set up a database migration tool for managing schema changes.
+6.  **Non-Functional Requirements (RFC-007):**
+    - Begin addressing API documentation (Swagger/OpenAPI).
+    - Standardize error handling further.
+    - Implement a logging strategy.
 
-The completion of these steps will significantly advance the platform's core functionalities.
+Addressing these will make the platform more robust, maintainable, and production-ready.

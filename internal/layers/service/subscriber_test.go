@@ -324,8 +324,8 @@ func (m *MockEmailService) SendConfirmationEmail(toEmail, recipientName, confirm
 	return args.Error(0)
 }
 
-func (m *MockEmailService) SendNewsletterIssue(toEmail, recipientName, subject, htmlContent string) error {
-	args := m.Called(toEmail, recipientName, subject, htmlContent)
+func (m *MockEmailService) SendNewsletterIssue(toEmail, recipientName, subject, htmlContent, unsubscribeLink string) error {
+	args := m.Called(toEmail, recipientName, subject, htmlContent, unsubscribeLink)
 	return args.Error(0)
 }
 

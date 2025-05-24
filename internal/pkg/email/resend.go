@@ -64,7 +64,7 @@ func (s *ResendService) SendConfirmationEmail(toEmail, recipientName, confirmati
 }
 
 // SendNewsletterIssue sends a newsletter issue email using Resend.
-func (s *ResendService) SendNewsletterIssue(toEmail, recipientName, subject, htmlContent string) error {
+func (s *ResendService) SendNewsletterIssue(toEmail, recipientName, subject, htmlContent, unsubscribeLink string) error {
 	// Basic HTML structure, ideally use templates
 	fullHtmlContent := fmt.Sprintf(`
 		<html>
@@ -76,10 +76,10 @@ func (s *ResendService) SendNewsletterIssue(toEmail, recipientName, subject, htm
 			%s
 			<hr>
 			<p><small>You are receiving this email because you subscribed to our newsletter.</small></p>
-			<p><small><a href="[UNSUBSCRIBE_LINK_PLACEHOLDER]">Unsubscribe</a></small></p> 
+			<p><small><a href="%s">Unsubscribe</a></small></p> 
 		</body>
 		</html>
-	`, subject, recipientName, htmlContent) // Note: UNSUBSCRIBE_LINK_PLACEHOLDER needs to be replaced
+	`, subject, recipientName, htmlContent, unsubscribeLink)
 
 	params := &resend.SendEmailRequest{
 		From:    s.fromEmail,
