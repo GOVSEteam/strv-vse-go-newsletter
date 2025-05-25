@@ -3,6 +3,7 @@ package repository_test
 import (
 	"context"
 	"database/sql"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -16,7 +17,9 @@ import (
 
 // Helper function to create an editor for newsletter tests, as newsletters are tied to editors.
 func createTestEditorForPostTests(t *testing.T, ctx context.Context, repo repository.EditorRepository) *repository.Editor {
-	testEditor := testutils.CreateTestEditor(0) // Index 0 for generic editor in this context
+	// Use a unique suffix based on current time and random component to avoid conflicts
+	uniqueSuffix := int(time.Now().UnixNano()%10000) + rand.Intn(1000)
+	testEditor := testutils.CreateTestEditor(uniqueSuffix)
 	createdEditor, err := repo.InsertEditor(testEditor.FirebaseUID, testEditor.Email)
 	require.NoError(t, err)
 	require.NotNil(t, createdEditor)
@@ -28,7 +31,9 @@ func createEditorAndNewsletterForPostTests(t *testing.T, ctx context.Context, su
 	editorRepo := repository.EditorRepo(suite.DB)
 	newsletterRepo := repository.NewsletterRepo(suite.DB)
 
-	testEditor := testutils.CreateTestEditor(0)
+	// Use a unique suffix based on current time and random component to avoid conflicts
+	uniqueSuffix := int(time.Now().UnixNano()%10000) + rand.Intn(1000)
+	testEditor := testutils.CreateTestEditor(uniqueSuffix)
 	createdEditor, err := editorRepo.InsertEditor(testEditor.FirebaseUID, testEditor.Email)
 	require.NoError(t, err)
 	editorID = createdEditor.ID
@@ -264,7 +269,7 @@ func TestMarkPostAsPublished_Success(t *testing.T) {
 	publishedPost, err := postRepo.GetPostByID(ctx, createdPostID)
 	require.NoError(t, err)
 	require.NotNil(t, publishedPost.PublishedAt)
-	assert.Equal(t, publishTime, publishedPost.PublishedAt.Truncate(time.Second))
+	assert.Equal(t, publishTime, publishedPost.PublishedAt.UTC().Truncate(time.Second))
 }
 
 func TestMarkPostAsPublished_NotFound(t *testing.T) {
