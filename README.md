@@ -111,4 +111,20 @@ The application uses **PostgreSQL** as the primary database for storing data. Th
 
 Given the size of the project and number of tables, automatic migrations are not implemented. If you want to change database schema, do that manually from the web administration console or, for more advanced use-cases, by running `railway connect` (you need to have the Railway CLI installed).
 
+## Database Setup
+
+### Running Migrations
+
+1. Set your DATABASE_URL environment variable
+2. Run migrations:
+   ```bash
+   go run cmd/migrate/main.go up
+   ```
+
+### Development Workflow
+
+- Create new migration: `goose -dir migrations create migration_name sql`
+- Apply migrations: `go run cmd/migrate/main.go up`
+- Check status: `go run cmd/migrate/main.go status`
+
 
