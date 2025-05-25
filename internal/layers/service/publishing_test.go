@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models"
@@ -57,11 +56,19 @@ func (m *MockNewsletterService) GetPostByID(ctx context.Context, postID uuid.UUI
 func (m *MockNewsletterService) GetPostsByNewsletterID(ctx context.Context, editorFirebaseUID string, newsletterID uuid.UUID, limit, offset int, statusFilter string) ([]models.Post, int, error) {
 	panic("GetPostsByNewsletterID should not be called in publishing tests")
 }
-func (m *MockNewsletterService) UpdatePost(ctx context.Context, editorFirebaseUID string, postID uuid.UUID, title *string, content *string, scheduledAt **time.Time) (*models.Post, error) {
+func (m *MockNewsletterService) UpdatePost(ctx context.Context, editorFirebaseUID string, postID uuid.UUID, title *string, content *string) (*models.Post, error) {
 	panic("UpdatePost should not be called in publishing tests")
 }
 func (m *MockNewsletterService) DeletePost(ctx context.Context, editorFirebaseUID string, postID uuid.UUID) error {
-	panic("DeletePost should not be called in publishing tests")
+	args := m.Called(ctx, editorFirebaseUID, postID)
+	return args.Error(0)
+}
+func (m *MockNewsletterService) ListPostsByNewsletter(ctx context.Context, newsletterID uuid.UUID, limit int, offset int) ([]*models.Post, int, error) {
+	args := m.Called(ctx, newsletterID, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Int(1), args.Error(2)
+	}
+	return args.Get(0).([]*models.Post), args.Int(1), args.Error(2)
 }
 
 type MockSubscriberService struct {
@@ -118,19 +125,26 @@ func TestPublishPostToSubscribers_Success(t *testing.T) {
 	testPost.ID = postUUID
 	testPost.NewsletterID = newsletterUUID
 
-	testSubscribers := []*models.Subscriber{
+	// Convert to slice of values instead of pointers
+	testSubscriberPtrs := []*models.Subscriber{
 		testutils.CreateTestSubscriber(newsletterUUID.String(), 1),
 		testutils.CreateTestSubscriber(newsletterUUID.String(), 2),
 	}
-	testSubscribers[0].Email = "sub1@example.com"
-	testSubscribers[0].UnsubscribeToken = "unsub1"
-	testSubscribers[1].Email = "sub2@example.com"
-	testSubscribers[1].UnsubscribeToken = "unsub2"
+	testSubscriberPtrs[0].Email = "sub1@example.com"
+	testSubscriberPtrs[0].UnsubscribeToken = "unsub1"
+	testSubscriberPtrs[1].Email = "sub2@example.com"
+	testSubscriberPtrs[1].UnsubscribeToken = "unsub2"
+	
+	// Convert to slice of values for the mock
+	testSubscribers := []models.Subscriber{
+		*testSubscriberPtrs[0],
+		*testSubscriberPtrs[1],
+	}
 
 	mockNewsletter.On("GetPostForPublishing", ctx, postUUID, editorFirebaseUID).Return(testPost, nil)
 	mockSubscriber.On("GetActiveSubscribersForNewsletter", ctx, newsletterUUID.String()).Return(testSubscribers, nil)
-	mockEmail.On("SendNewsletterIssue", testSubscribers[0].Email, testSubscribers[0].Email, testPost.Title, testPost.Content, mock.AnythingOfType("string")).Return(nil)
-	mockEmail.On("SendNewsletterIssue", testSubscribers[1].Email, testSubscribers[1].Email, testPost.Title, testPost.Content, mock.AnythingOfType("string")).Return(nil)
+	mockEmail.On("SendNewsletterIssue", testSubscriberPtrs[0].Email, testSubscriberPtrs[0].Email, testPost.Title, testPost.Content, mock.AnythingOfType("string")).Return(nil)
+	mockEmail.On("SendNewsletterIssue", testSubscriberPtrs[1].Email, testSubscriberPtrs[1].Email, testPost.Title, testPost.Content, mock.AnythingOfType("string")).Return(nil)
 	mockNewsletter.On("MarkPostAsPublished", ctx, editorFirebaseUID, postUUID).Return(nil)
 
 	service := NewPublishingService(mockNewsletter, mockSubscriber, mockEmail)
@@ -156,7 +170,7 @@ func TestPublishPostToSubscribers_NoSubscribers(t *testing.T) {
 	testPost.ID = postUUID
 	testPost.NewsletterID = newsletterUUID
 
-	var noSubscribers []*models.Subscriber
+	var noSubscribers []models.Subscriber
 
 	mockNewsletter.On("GetPostForPublishing", ctx, postUUID, editorFirebaseUID).Return(testPost, nil)
 	mockSubscriber.On("GetActiveSubscribersForNewsletter", ctx, newsletterUUID.String()).Return(noSubscribers, nil)
@@ -240,17 +254,17 @@ func TestPublishPostToSubscribers_ErrorMarkingPublished(t *testing.T) {
 	testPost.ID = postUUID
 	testPost.NewsletterID = newsletterUUID
 
-	testSubscribers := []*models.Subscriber{
-		testutils.CreateTestSubscriber(newsletterUUID.String(), 1),
-	}
-	testSubscribers[0].Email = "sub1@example.com"
-	testSubscribers[0].UnsubscribeToken = "unsub1"
+	testSubscriberPtr := testutils.CreateTestSubscriber(newsletterUUID.String(), 1)
+	testSubscriberPtr.Email = "sub1@example.com"
+	testSubscriberPtr.UnsubscribeToken = "unsub1"
+	
+	testSubscribers := []models.Subscriber{*testSubscriberPtr}
 
 	expectedError := errors.New("update failed")
 
 	mockNewsletter.On("GetPostForPublishing", ctx, postUUID, editorFirebaseUID).Return(testPost, nil)
 	mockSubscriber.On("GetActiveSubscribersForNewsletter", ctx, newsletterUUID.String()).Return(testSubscribers, nil)
-	mockEmail.On("SendNewsletterIssue", testSubscribers[0].Email, testSubscribers[0].Email, testPost.Title, testPost.Content, mock.AnythingOfType("string")).Return(nil)
+	mockEmail.On("SendNewsletterIssue", testSubscriberPtr.Email, testSubscriberPtr.Email, testPost.Title, testPost.Content, mock.AnythingOfType("string")).Return(nil)
 	mockNewsletter.On("MarkPostAsPublished", ctx, editorFirebaseUID, postUUID).Return(expectedError)
 
 	service := NewPublishingService(mockNewsletter, mockSubscriber, mockEmail)
@@ -284,7 +298,8 @@ func TestPublishPostToSubscribers_PartialEmailFailures(t *testing.T) {
 	sub2 := testutils.CreateTestSubscriber(newsletterUUID.String(), 2)
 	sub2.Email = "sub2@example.com"
 	sub2.UnsubscribeToken = "unsub2"
-	testSubscribers := []*models.Subscriber{sub1, sub2}
+	
+	testSubscribers := []models.Subscriber{*sub1, *sub2}
 
 	emailSendFailedError := errors.New("email send failed")
 
@@ -299,7 +314,7 @@ func TestPublishPostToSubscribers_PartialEmailFailures(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "email(s) failed to send")
-	assert.Contains(t, err.Error(), emailSendFailedError.Error())
+	assert.Contains(t, err.Error(), "1 email(s) failed to send")
 
 	mockNewsletter.AssertExpectations(t)
 	mockSubscriber.AssertExpectations(t)

@@ -6,8 +6,6 @@ import (
 	"testing"
 
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/setup"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"firebase.google.com/go/v4/auth"
 )
