@@ -5,21 +5,22 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models"
 	"github.com/google/uuid"
 )
 
 // Test data generators
-func CreateTestEditor(suffix int) *models.Editor {
+func CreateTestEditor(suffix int) *repository.Editor {
 	timestamp := time.Now().Unix()
-	return &models.Editor{
+	return &repository.Editor{
 		Email:       fmt.Sprintf("test_editor_%d_%d@example.com", suffix, timestamp),
 		FirebaseUID: fmt.Sprintf("TEST_firebase_uid_%d_%d", suffix, timestamp),
 	}
 }
 
-func CreateTestNewsletter(editorID uuid.UUID, suffix int) *models.Newsletter {
-	return &models.Newsletter{
+func CreateTestNewsletter(editorID string, suffix int) *repository.Newsletter {
+	return &repository.Newsletter{
 		EditorID:    editorID,
 		Name:        fmt.Sprintf("TEST_Newsletter_%03d", suffix),
 		Description: fmt.Sprintf("TEST_Description for testing newsletter %d", suffix),

@@ -111,11 +111,11 @@ func TestSubscriberHandler_SubscribeToNewsletter(t *testing.T) {
 		},
 		{
 			name:                "Fail - Invalid JSON body",
-			newsletterIDPath:    "test-newsletter-id",
+			newsletterIDPath:    "news-123",
 			body:                service.SubscribeToNewsletterRequest{}, // Placeholder, actual body is raw string below
 			mockServiceSetup:    func() { /* No service call expected */ },
 			expectedStatusCode:  http.StatusBadRequest,
-			expectedBodyContains: "invalid request body",
+			expectedBodyContains: "Invalid request body",
 		},
 		{
 			name:                "Fail - Missing Email in request",
@@ -225,70 +225,67 @@ func TestSubscriberHandler_SubscribeToNewsletter(t *testing.T) {
 
 func TestSubscriberHandler_UnsubscribeFromNewsletter(t *testing.T) {
 	mockService := &MockSubscriberService{}
-	// handler := subscriber.NewSubscriberHandler(mockService) // No constructor
-	// We will call subscriber.UnsubscribeHandler(mockService) directly in test
 
 	tests := []struct {
 		name                 string
-		newsletterIDPath     string
-		emailQueryParam      string
+		tokenQueryParam      string
 		mockServiceSetup     func()
 		expectedStatusCode   int
 		expectedBodyContains string
 	}{
 		{
-			name:               "Success - Unsubscribed",
-			newsletterIDPath:   "news-123",
-			emailQueryParam:    "test@example.com",
+			name:            "Success - Unsubscribed",
+			tokenQueryParam: "valid-unsubscribe-token",
 			mockServiceSetup: func() {
-				mockService.UnsubscribeFromNewsletterFunc = func(ctx context.Context, req service.UnsubscribeFromNewsletterRequest) error {
-					if req.Email == "test@example.com" && req.NewsletterID == "news-123" {
+				mockService.UnsubscribeByTokenFunc = func(ctx context.Context, token string) error {
+					if token == "valid-unsubscribe-token" {
 						return nil
 					}
-					return errors.New("unexpected input to mock service for unsubscribe")
+					return errors.New("unexpected token in mock service for unsubscribe")
 				}
 			},
-			expectedStatusCode: http.StatusNoContent,
+			expectedStatusCode:   http.StatusOK,
+			expectedBodyContains: "Successfully unsubscribed",
 		},
 		{
-			name:               "Fail - Missing NewsletterID in path",
-			newsletterIDPath:   "",
-			emailQueryParam:    "test@example.com",
+			name:               "Fail - Missing Token",
+			tokenQueryParam:    "",
 			mockServiceSetup:   func() { /* No service call expected */ },
 			expectedStatusCode: http.StatusBadRequest,
-			expectedBodyContains: "newsletterID path parameter is required",
+			expectedBodyContains: "token query parameter is required",
 		},
 		{
-			name:               "Fail - Missing Email in query",
-			newsletterIDPath:   "news-123",
-			emailQueryParam:    "",
-			mockServiceSetup:   func() { /* No service call expected */ },
-			expectedStatusCode: http.StatusBadRequest,
-			expectedBodyContains: "email query parameter is required",
-		},
-		{
-			name:               "Fail - Subscription Not Found",
-			newsletterIDPath:   "news-123",
-			emailQueryParam:    "nonexistent@example.com",
+			name:            "Fail - Invalid Token",
+			tokenQueryParam: "invalid-token",
 			mockServiceSetup: func() {
-				mockService.UnsubscribeFromNewsletterFunc = func(ctx context.Context, req service.UnsubscribeFromNewsletterRequest) error {
+				mockService.UnsubscribeByTokenFunc = func(ctx context.Context, token string) error {
+					return service.ErrInvalidOrExpiredToken
+				}
+			},
+			expectedStatusCode:   http.StatusBadRequest,
+			expectedBodyContains: "Invalid or expired unsubscribe token",
+		},
+		{
+			name:            "Fail - Subscription Not Found",
+			tokenQueryParam: "nonexistent-token",
+			mockServiceSetup: func() {
+				mockService.UnsubscribeByTokenFunc = func(ctx context.Context, token string) error {
 					return service.ErrSubscriptionNotFound
 				}
 			},
-			expectedStatusCode: http.StatusNotFound,
-			expectedBodyContains: service.ErrSubscriptionNotFound.Error(),
+			expectedStatusCode:   http.StatusBadRequest,
+			expectedBodyContains: "Invalid or expired unsubscribe token",
 		},
 		{
-			name:               "Fail - Service Internal Error",
-			newsletterIDPath:   "news-123",
-			emailQueryParam:    "test@example.com",
+			name:            "Fail - Service Internal Error",
+			tokenQueryParam: "any-token",
 			mockServiceSetup: func() {
-				mockService.UnsubscribeFromNewsletterFunc = func(ctx context.Context, req service.UnsubscribeFromNewsletterRequest) error {
+				mockService.UnsubscribeByTokenFunc = func(ctx context.Context, token string) error {
 					return errors.New("some internal service error")
 				}
 			},
-			expectedStatusCode: http.StatusInternalServerError,
-			expectedBodyContains: "failed to unsubscribe: some internal service error",
+			expectedStatusCode:   http.StatusInternalServerError,
+			expectedBodyContains: "Failed to unsubscribe: some internal service error",
 		},
 	}
 
@@ -296,45 +293,25 @@ func TestSubscriberHandler_UnsubscribeFromNewsletter(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.mockServiceSetup()
 
-			url := "/api/newsletters/" + tt.newsletterIDPath + "/subscribers"
-			if tt.emailQueryParam != "" {
-				url += "?email=" + tt.emailQueryParam
+			url := "/api/subscriptions/unsubscribe"
+			if tt.tokenQueryParam != "" {
+				url += "?token=" + tt.tokenQueryParam
 			}
 
-			req, err := http.NewRequest("DELETE", url, nil)
+			req, err := http.NewRequest("GET", url, nil)
 			if err != nil {
 				t.Fatalf("could not create request: %v", err)
 			}
 
-			if tt.newsletterIDPath != "" {
-				req.SetPathValue("newsletterID", tt.newsletterIDPath)
-			}
-
 			rr := httptest.NewRecorder()
-			// httpHandler := subscriber.UnsubscribeHandler(mockService) // Assuming UnsubscribeHandler exists
-			// httpHandler.ServeHTTP(rr, req) // Call when UnsubscribeHandler is implemented
-
-			// For now, this test will fail until UnsubscribeHandler is created.
-			// To make it runnable without UnsubscribeHandler, we'd need to skip or comment out the call.
-			// assert.Equal(t, tt.expectedStatusCode, rr.Code, "handler returned wrong status code. Body: "+rr.Body.String())
-
-			// if tt.expectedStatusCode != http.StatusNoContent && tt.expectedBodyContains != "" {
-			// 	assert.Contains(t, rr.Body.String(), tt.expectedBodyContains, "handler returned unexpected body")
-			// } else if tt.expectedStatusCode == http.StatusNoContent && rr.Body.Len() > 0 {
-			// 	assert.Fail(t, "handler returned body for 204 No Content: got %v", rr.Body.String())
-			// }
-			// Mark test as skipped until UnsubscribeHandler is ready
-			if subscriber.UnsubscribeHandler == nil {
-				t.Skip("Skipping UnsubscribeFromNewsletter test as handler is not yet implemented")
-			} else {
-				httpHandler := subscriber.UnsubscribeHandler(mockService)
-				httpHandler.ServeHTTP(rr, req)
-				assert.Equal(t, tt.expectedStatusCode, rr.Code, "handler returned wrong status code. Body: "+rr.Body.String())
-				if tt.expectedStatusCode != http.StatusNoContent && tt.expectedBodyContains != "" {
-					assert.Contains(t, rr.Body.String(), tt.expectedBodyContains, "handler returned unexpected body")
-				} else if tt.expectedStatusCode == http.StatusNoContent && rr.Body.Len() > 0 {
-					assert.Fail(t, "handler returned body for 204 No Content: got %v", rr.Body.String())
-				}
+			
+			// Call the UnsubscribeHandler directly - it exists in the subscriber package
+			httpHandler := subscriber.UnsubscribeHandler(mockService)
+			httpHandler.ServeHTTP(rr, req)
+			
+			assert.Equal(t, tt.expectedStatusCode, rr.Code, "handler returned wrong status code. Body: "+rr.Body.String())
+			if tt.expectedBodyContains != "" {
+				assert.Contains(t, rr.Body.String(), tt.expectedBodyContains, "handler returned unexpected body")
 			}
 		})
 	}
@@ -380,8 +357,8 @@ func TestSubscriberHandler_ConfirmSubscriptionHandler(t *testing.T) {
 					return service.ErrInvalidOrExpiredToken
 				}
 			},
-			expectedStatusCode:   http.StatusBadRequest, // As per current handler mapping
-			expectedBodyContains: service.ErrInvalidOrExpiredToken.Error(),
+			expectedStatusCode:   http.StatusBadRequest,
+			expectedBodyContains: "Invalid or expired confirmation token",
 		},
 		{
 			name:            "Fail - Already Confirmed",
@@ -392,7 +369,7 @@ func TestSubscriberHandler_ConfirmSubscriptionHandler(t *testing.T) {
 				}
 			},
 			expectedStatusCode:   http.StatusConflict,
-			expectedBodyContains: service.ErrAlreadyConfirmed.Error(),
+			expectedBodyContains: "Subscription is already confirmed",
 		},
 		{
 			name:            "Fail - Service Internal Error",
@@ -403,7 +380,7 @@ func TestSubscriberHandler_ConfirmSubscriptionHandler(t *testing.T) {
 				}
 			},
 			expectedStatusCode:   http.StatusInternalServerError,
-			expectedBodyContains: "failed to confirm subscription: some internal service error",
+			expectedBodyContains: "Failed to confirm subscription: some internal service error",
 		},
 	}
 
@@ -422,19 +399,14 @@ func TestSubscriberHandler_ConfirmSubscriptionHandler(t *testing.T) {
 			}
 
 			rr := httptest.NewRecorder()
-			// httpHandler := subscriber.ConfirmSubscriptionHandler(mockService) // Assuming ConfirmSubscriptionHandler exists
-			// httpHandler.ServeHTTP(rr, req) // Call when ConfirmSubscriptionHandler is implemented
-
-			// Mark test as skipped until ConfirmSubscriptionHandler is ready
-			if subscriber.ConfirmSubscriptionHandler == nil {
-				t.Skip("Skipping ConfirmSubscriptionHandler test as handler is not yet implemented")
-			} else {
-				httpHandler := subscriber.ConfirmSubscriptionHandler(mockService)
-				httpHandler.ServeHTTP(rr, req)
-				assert.Equal(t, tt.expectedStatusCode, rr.Code, "handler returned wrong status code. Body: "+rr.Body.String())
-				if tt.expectedBodyContains != "" {
-					assert.Contains(t, rr.Body.String(), tt.expectedBodyContains, "handler returned unexpected body")
-				}
+			
+			// Call the ConfirmSubscriptionHandler directly - it exists in the subscriber package
+			httpHandler := subscriber.ConfirmSubscriptionHandler(mockService)
+			httpHandler.ServeHTTP(rr, req)
+			
+			assert.Equal(t, tt.expectedStatusCode, rr.Code, "handler returned wrong status code. Body: "+rr.Body.String())
+			if tt.expectedBodyContains != "" {
+				assert.Contains(t, rr.Body.String(), tt.expectedBodyContains, "handler returned unexpected body")
 			}
 		})
 	}
