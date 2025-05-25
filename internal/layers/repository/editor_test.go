@@ -108,8 +108,9 @@ func TestGetEditorByFirebaseUID_NotFound(t *testing.T) {
 	nonExistentUID := "firebase-uid-" + uuid.New().String()
 	retrievedEditor, err := repo.GetEditorByFirebaseUID(nonExistentUID)
 
-	// Repository returns nil, nil for not found cases
-	assert.NoError(t, err)
+	// Repository returns ErrEditorNotFound for not found cases
+	assert.Error(t, err)
+	assert.Equal(t, repository.ErrEditorNotFound, err)
 	assert.Nil(t, retrievedEditor)
 }
 

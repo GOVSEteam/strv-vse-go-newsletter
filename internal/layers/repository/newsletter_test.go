@@ -3,7 +3,9 @@ package repository_test
 import (
 	"context"
 	"database/sql"
+	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/testutils"
@@ -14,7 +16,9 @@ import (
 
 // Helper function to create an editor for newsletter tests, as newsletters are tied to editors.
 func createTestEditorForNewsletterTests(t *testing.T, ctx context.Context, repo repository.EditorRepository) *repository.Editor {
-	testEditor := testutils.CreateTestEditor(0) // Index 0 for generic editor in this context
+	// Use a unique suffix based on current time and random component to avoid conflicts
+	uniqueSuffix := int(time.Now().UnixNano()%10000) + rand.Intn(1000)
+	testEditor := testutils.CreateTestEditor(uniqueSuffix)
 	createdEditor, err := repo.InsertEditor(testEditor.FirebaseUID, testEditor.Email)
 	require.NoError(t, err)
 	require.NotNil(t, createdEditor)
@@ -73,7 +77,7 @@ func TestCreateNewsletter_DuplicateNameForSameEditor(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "violates unique constraint")
-	assert.Contains(t, err.Error(), "newsletters_editor_id_name_key") // Assuming this is the constraint name
+	assert.Contains(t, err.Error(), "newsletter_name_per_editor_unique")
 }
 
 func TestCreateNewsletter_SameNameDifferentEditor_Success(t *testing.T) {
@@ -291,8 +295,8 @@ func TestUpdateNewsletter_NotOwner(t *testing.T) {
 	nameUpdate := "Hacked Name"
 	_, err = newsletterRepo.UpdateNewsletter(created.ID, attackerEditor.ID, &nameUpdate, nil)
 
-	// Repository returns nil, nil for not found/forbidden cases
-	assert.NoError(t, err)
+	// Repository returns sql.ErrNoRows for not found/forbidden cases
+	assert.Equal(t, sql.ErrNoRows, err)
 }
 
 func TestDeleteNewsletter_Success(t *testing.T) {
