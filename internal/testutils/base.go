@@ -17,9 +17,15 @@ func NewTestSuite(t *testing.T) *TestSuite {
 	config := LoadTestConfig(t)
 	config.Validate(t)
 
+	db := SetupTestDB(t)
+	firestore := SetupTestFirestore(t)
+	
+	// Clean up any leftover test data before starting tests
+	CleanupTestData(t, db)
+
 	return &TestSuite{
-		DB:        SetupTestDB(t),
-		Firestore: SetupTestFirestore(t),
+		DB:        db,
+		Firestore: firestore,
 		Config:    config,
 	}
 }
