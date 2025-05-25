@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  test-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: newsletter_test
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - test_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d newsletter_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  test-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    environment:
+      - TEST_DATABASE_URL=postgres://test_user:test_password@test-db:5432/newsletter_test?sslmode=disable
+      - DATABASE_URL=postgres://test_user:test_password@test-db:5432/newsletter_test?sslmode=disable
+      - RESEND_API_KEY=test_key_for_console_service
+      - EMAIL_FROM=test@example.com
+      - FIREBASE_API_KEY=test_firebase_key
+    depends_on:
+      test-db:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: >
+      sh -c "
+        echo 'Waiting for database to be ready...' &&
+        sleep 5 &&
+        echo 'Running migrations...' &&
+        go run cmd/migrate/main.go up &&
+        echo 'Running integration tests...' &&
+        go test -v ./tests/integration/... -race -cover
+      "
+
+  # Service for running tests locally without building
+  test-runner:
+    image: golang:1.21-alpine
+    environment:
+      - TEST_DATABASE_URL=postgres://test_user:test_password@test-db:5432/newsletter_test?sslmode=disable
+      - DATABASE_URL=postgres://test_user:test_password@test-db:5432/newsletter_test?sslmode=disable
+      - RESEND_API_KEY=test_key_for_console_service
+      - EMAIL_FROM=test@example.com
+      - FIREBASE_API_KEY=test_firebase_key
+      - CGO_ENABLED=0
+    depends_on:
+      test-db:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - go_mod_cache:/go/pkg/mod
+    working_dir: /app
+    command: >
+      sh -c "
+        echo 'Installing dependencies...' &&
+        go mod download &&
+        echo 'Waiting for database to be ready...' &&
+        sleep 5 &&
+        echo 'Running migrations...' &&
+        go run cmd/migrate/main.go up &&
+        echo 'Running integration tests...' &&
+        go test -v ./tests/integration/... -race -cover -timeout 30m
+      "
+
+volumes:
+  test_db_data:
+  go_mod_cache: 
