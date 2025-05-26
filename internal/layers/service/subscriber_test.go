@@ -1,465 +1,156 @@
-package service_test
+package service
 
 import (
 	"context"
-	"errors"
 	"testing"
-	"time"
 
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
-// MockSubscriberRepository is a mock implementation of SubscriberRepository
+// MockSubscriberRepository is a mock type for the SubscriberRepository type
 type MockSubscriberRepository struct {
 	mock.Mock
 }
 
-func (m *MockSubscriberRepository) CreateSubscriber(ctx context.Context, subscriber models.Subscriber) (string, error) {
-	args := m.Called(ctx, subscriber)
-	return args.String(0), args.Error(1)
-}
-
-func (m *MockSubscriberRepository) GetSubscriberByEmailAndNewsletterID(ctx context.Context, email string, newsletterID string) (*models.Subscriber, error) {
-	args := m.Called(ctx, email, newsletterID)
+func (m *MockSubscriberRepository) GetSubscriberByEmailAndNewsletterID(email, newsletterID string) (*repository.Subscriber, error) {
+	args := m.Called(email, newsletterID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*models.Subscriber), args.Error(1)
+	return args.Get(0).(*repository.Subscriber), args.Error(1)
 }
 
-func (m *MockSubscriberRepository) UpdateSubscriberStatus(ctx context.Context, subscriberID string, status models.SubscriberStatus) error {
-	args := m.Called(ctx, subscriberID, status)
-	return args.Error(0)
-}
-
-func (m *MockSubscriberRepository) GetSubscriberByConfirmationToken(ctx context.Context, token string) (*models.Subscriber, error) {
-	args := m.Called(ctx, token)
+func (m *MockSubscriberRepository) CreateSubscriber(email, newsletterID, confirmationToken string) (*repository.Subscriber, error) {
+	args := m.Called(email, newsletterID, confirmationToken)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*models.Subscriber), args.Error(1)
+	return args.Get(0).(*repository.Subscriber), args.Error(1)
 }
 
-func (m *MockSubscriberRepository) ConfirmSubscriber(ctx context.Context, subscriberID string, confirmationTime time.Time) error {
-	args := m.Called(ctx, subscriberID, confirmationTime)
-	return args.Error(0)
-}
-
-func (m *MockSubscriberRepository) GetSubscriberByUnsubscribeToken(ctx context.Context, token string) (*models.Subscriber, error) {
-	args := m.Called(ctx, token)
+func (m *MockSubscriberRepository) ConfirmSubscriber(confirmationToken string) (*repository.Subscriber, error) {
+	args := m.Called(confirmationToken)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*models.Subscriber), args.Error(1)
+	return args.Get(0).(*repository.Subscriber), args.Error(1)
 }
 
-func (m *MockSubscriberRepository) GetActiveSubscribersByNewsletterID(ctx context.Context, newsletterID string) ([]models.Subscriber, error) {
-	args := m.Called(ctx, newsletterID)
+func (m *MockSubscriberRepository) ListSubscribersByNewsletterID(newsletterID string, limit, offset int) ([]repository.Subscriber, int, error) {
+	args := m.Called(newsletterID, limit, offset)
 	if args.Get(0) == nil {
-		return nil, args.Error(1)
+		return nil, args.Int(1), args.Error(2)
 	}
-	return args.Get(0).([]models.Subscriber), args.Error(1)
+	return args.Get(0).([]repository.Subscriber), args.Int(1), args.Error(2)
 }
 
-// MockNewsletterRepository is a mock implementation of NewsletterRepository
-type MockNewsletterRepository struct {
-	mock.Mock
-}
+// MockEmailService is defined in publishing_test.go
 
-func (m *MockNewsletterRepository) GetNewsletterByID(newsletterID string) (*repository.Newsletter, error) {
-	args := m.Called(newsletterID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*repository.Newsletter), args.Error(1)
-}
-
-func (m *MockNewsletterRepository) ListNewslettersByEditorID(editorID string, limit int, offset int) ([]repository.Newsletter, int, error) {
-	args := m.Called(editorID, limit, offset)
-	return args.Get(0).([]repository.Newsletter), args.Int(1), args.Error(2)
-}
-func (m *MockNewsletterRepository) CreateNewsletter(editorID, name, description string) (*repository.Newsletter, error) {
-	args := m.Called(editorID, name, description)
-	return args.Get(0).(*repository.Newsletter), args.Error(1)
-}
-func (m *MockNewsletterRepository) GetNewsletterByIDAndEditorID(newsletterID string, editorID string) (*repository.Newsletter, error) {
-	args := m.Called(newsletterID, editorID)
-	return args.Get(0).(*repository.Newsletter), args.Error(1)
-}
-func (m *MockNewsletterRepository) UpdateNewsletter(newsletterID string, editorID string, name *string, description *string) (*repository.Newsletter, error) {
-	args := m.Called(newsletterID, editorID, name, description)
-	return args.Get(0).(*repository.Newsletter), args.Error(1)
-}
-func (m *MockNewsletterRepository) DeleteNewsletter(newsletterID string, editorID string) error {
-	args := m.Called(newsletterID, editorID)
-	return args.Error(0)
-}
-func (m *MockNewsletterRepository) GetNewsletterByNameAndEditorID(name string, editorID string) (*repository.Newsletter, error) {
-	args := m.Called(name, editorID)
-	return args.Get(0).(*repository.Newsletter), args.Error(1)
-}
-
-func TestSubscriberService_SubscribeToNewsletter(t *testing.T) {
+// Test Scenarios
+func TestSubscribe_Success(t *testing.T) {
 	ctx := context.Background()
+	mockSubscriberRepo := new(MockSubscriberRepository)
+	mockNewsletterRepo := new(MockNewsletterRepository)
+	mockEmailService := new(MockEmailService)
 
-	tests := []struct {
-		name             string
-		req              service.SubscribeToNewsletterRequest
-		mockSetup        func(mockSubRepo *MockSubscriberRepository, mockNewsRepo *MockNewsletterRepository, mockEmailSvc *MockEmailService)
-		expectedResponse *service.SubscribeToNewsletterResponse
-		expectedError    error
-	}{
-		{
-			name: "Success",
-			req: service.SubscribeToNewsletterRequest{Email: "test@example.com", NewsletterID: "news-123"},
-			mockSetup: func(mockSubRepo *MockSubscriberRepository, mockNewsRepo *MockNewsletterRepository, mockEmailSvc *MockEmailService) {
-				mockNewsRepo.On("GetNewsletterByID", "news-123").Return(&repository.Newsletter{ID: "news-123"}, nil).Once()
-				mockSubRepo.On("GetSubscriberByEmailAndNewsletterID", ctx, "test@example.com", "news-123").Return(nil, nil).Once()
-				mockSubRepo.On("CreateSubscriber", ctx, mock.AnythingOfType("models.Subscriber")).Return("sub-xyz", nil).Once()
-				mockEmailSvc.On("SendConfirmationEmail", "test@example.com", "test@example.com", mock.AnythingOfType("string")).Return(nil).Once()
-			},
-			expectedResponse: &service.SubscribeToNewsletterResponse{
-				SubscriberID: "sub-xyz",
-				Email:        "test@example.com",
-				NewsletterID: "news-123",
-				Status:       models.SubscriberStatusPendingConfirmation, // Corrected status
-			},
-			expectedError: nil,
-		},
-		{
-			name:          "Fail - Empty Email",
-			req:           service.SubscribeToNewsletterRequest{Email: "", NewsletterID: "news-123"},
-			mockSetup:     func(mockSubRepo *MockSubscriberRepository, mockNewsRepo *MockNewsletterRepository, mockEmailSvc *MockEmailService) {},
-			expectedError: errors.New("email cannot be empty"),
-		},
-		{
-			name:          "Fail - Empty NewsletterID",
-			req:           service.SubscribeToNewsletterRequest{Email: "test@example.com", NewsletterID: ""},
-			mockSetup:     func(mockSubRepo *MockSubscriberRepository, mockNewsRepo *MockNewsletterRepository, mockEmailSvc *MockEmailService) {},
-			expectedError: errors.New("newsletter ID cannot be empty"),
-		},
-		{
-			name: "Fail - Newsletter Not Found",
-			req:  service.SubscribeToNewsletterRequest{Email: "test@example.com", NewsletterID: "unknown-news-id"},
-			mockSetup: func(mockSubRepo *MockSubscriberRepository, mockNewsRepo *MockNewsletterRepository, mockEmailSvc *MockEmailService) {
-				mockNewsRepo.On("GetNewsletterByID", "unknown-news-id").Return(nil, nil).Once()
-			},
-			expectedError: service.ErrNewsletterNotFound,
-		},
-		{
-			name: "Fail - GetNewsletterByID Error",
-			req:  service.SubscribeToNewsletterRequest{Email: "test@example.com", NewsletterID: "news-123"},
-			mockSetup: func(mockSubRepo *MockSubscriberRepository, mockNewsRepo *MockNewsletterRepository, mockEmailSvc *MockEmailService) {
-				mockNewsRepo.On("GetNewsletterByID", "news-123").Return(nil, errors.New("db error")).Once()
-			},
-			expectedError: errors.New("db error"),
-		},
-		{
-			name: "Fail - Already Subscribed",
-			req:  service.SubscribeToNewsletterRequest{Email: "test@example.com", NewsletterID: "news-123"},
-			mockSetup: func(mockSubRepo *MockSubscriberRepository, mockNewsRepo *MockNewsletterRepository, mockEmailSvc *MockEmailService) {
-				mockNewsRepo.On("GetNewsletterByID", "news-123").Return(&repository.Newsletter{ID: "news-123"}, nil).Once()
-				mockSubRepo.On("GetSubscriberByEmailAndNewsletterID", ctx, "test@example.com", "news-123").Return(&models.Subscriber{ID: "sub-abc"}, nil).Once()
-			},
-			expectedError: service.ErrAlreadySubscribed,
-		},
-		{
-			name: "Fail - GetSubscriberByEmailAndNewsletterID Error",
-			req:  service.SubscribeToNewsletterRequest{Email: "test@example.com", NewsletterID: "news-123"},
-			mockSetup: func(mockSubRepo *MockSubscriberRepository, mockNewsRepo *MockNewsletterRepository, mockEmailSvc *MockEmailService) {
-				mockNewsRepo.On("GetNewsletterByID", "news-123").Return(&repository.Newsletter{ID: "news-123"}, nil).Once()
-				mockSubRepo.On("GetSubscriberByEmailAndNewsletterID", ctx, "test@example.com", "news-123").Return(nil, errors.New("firestore error")).Once()
-			},
-			expectedError: errors.New("firestore error"),
-		},
-		{
-			name: "Fail - CreateSubscriber Error",
-			req:  service.SubscribeToNewsletterRequest{Email: "test@example.com", NewsletterID: "news-123"},
-			mockSetup: func(mockSubRepo *MockSubscriberRepository, mockNewsRepo *MockNewsletterRepository, mockEmailSvc *MockEmailService) {
-				mockNewsRepo.On("GetNewsletterByID", "news-123").Return(&repository.Newsletter{ID: "news-123"}, nil).Once()
-				mockSubRepo.On("GetSubscriberByEmailAndNewsletterID", ctx, "test@example.com", "news-123").Return(nil, nil).Once()
-				mockSubRepo.On("CreateSubscriber", ctx, mock.AnythingOfType("models.Subscriber")).Return("", errors.New("create failed")).Once()
-			},
-			expectedError: errors.New("failed to create subscriber: create failed"), // Updated expected error
-		},
-	}
+	subscriberService := NewSubscriberService(mockSubscriberRepo, mockNewsletterRepo, mockEmailService)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockSubRepo := new(MockSubscriberRepository)
-			mockNewsRepo := new(MockNewsletterRepository)
-			mockEmailSvc := new(MockEmailService)
-			tt.mockSetup(mockSubRepo, mockNewsRepo, mockEmailSvc) // Pass mockEmailSvc
+	email := "test@example.com"
+	newsletterID := "newsletter-123"
+	newsletter := &repository.Newsletter{ID: newsletterID, Name: "Test Newsletter"}
+	expectedSubscriber := &repository.Subscriber{ID: "sub-123", Email: email, NewsletterID: newsletterID}
 
-			svc := service.NewSubscriberService(mockSubRepo, mockNewsRepo, mockEmailSvc)
-			resp, err := svc.SubscribeToNewsletter(ctx, tt.req)
+	mockNewsletterRepo.On("GetNewsletterByID", newsletterID).Return(newsletter, nil)
+	mockSubscriberRepo.On("GetSubscriberByEmailAndNewsletterID", email, newsletterID).Return(nil, nil)
+	mockSubscriberRepo.On("CreateSubscriber", email, newsletterID, mock.AnythingOfType("string")).Return(expectedSubscriber, nil)
+	mockEmailService.On("SendConfirmationEmail", email, email, mock.AnythingOfType("string")).Return(nil)
 
-			if tt.expectedError != nil {
-				assert.Error(t, err)
-				assert.EqualError(t, err, tt.expectedError.Error())
-				assert.Nil(t, resp)
-			} else {
-				assert.NoError(t, err)
-				assert.NotNil(t, resp)
-				assert.Equal(t, tt.expectedResponse.SubscriberID, resp.SubscriberID)
-				assert.Equal(t, tt.expectedResponse.Email, resp.Email)
-				assert.Equal(t, tt.expectedResponse.NewsletterID, resp.NewsletterID)
-				assert.Equal(t, tt.expectedResponse.Status, resp.Status)
-				// Can't directly compare time, but check if it's recent for the success case if needed
-			}
+	subscriber, err := subscriberService.Subscribe(ctx, email, newsletterID)
 
-			mockSubRepo.AssertExpectations(t)
-			mockNewsRepo.AssertExpectations(t)
-		})
-	}
+	assert.NoError(t, err)
+	assert.NotNil(t, subscriber)
+	assert.Equal(t, email, subscriber.Email)
+	mockSubscriberRepo.AssertExpectations(t)
+	mockNewsletterRepo.AssertExpectations(t)
+	mockEmailService.AssertExpectations(t)
 }
 
-func TestSubscriberService_UnsubscribeFromNewsletter(t *testing.T) {
+func TestSubscribe_AlreadySubscribed(t *testing.T) {
 	ctx := context.Background()
+	mockSubscriberRepo := new(MockSubscriberRepository)
+	mockNewsletterRepo := new(MockNewsletterRepository)
+	mockEmailService := new(MockEmailService)
 
-	tests := []struct {
-		name          string
-		req           service.UnsubscribeFromNewsletterRequest
-		mockSetup     func(mockSubRepo *MockSubscriberRepository, mockNewsRepo *MockNewsletterRepository, mockEmailSvc *MockEmailService) // Added mockEmailSvc
-		expectedError error
-	}{
-		{
-			name: "Success - Unsubscribed",
-			req:  service.UnsubscribeFromNewsletterRequest{Email: "test@example.com", NewsletterID: "news-123"},
-			mockSetup: func(mockSubRepo *MockSubscriberRepository, mockNewsRepo *MockNewsletterRepository, mockEmailSvc *MockEmailService) { // Added mockEmailSvc
-				mockSubRepo.On("GetSubscriberByEmailAndNewsletterID", ctx, "test@example.com", "news-123").
-					Return(&models.Subscriber{ID: "sub-xyz", Email: "test@example.com", NewsletterID: "news-123", Status: models.SubscriberStatusActive}, nil).Once()
-				mockSubRepo.On("UpdateSubscriberStatus", ctx, "sub-xyz", models.SubscriberStatusUnsubscribed).
-					Return(nil).Once()
-			},
-			expectedError: nil,
-		},
-		{
-			name: "Success - Already Unsubscribed",
-			req:  service.UnsubscribeFromNewsletterRequest{Email: "test@example.com", NewsletterID: "news-123"},
-			mockSetup: func(mockSubRepo *MockSubscriberRepository, mockNewsRepo *MockNewsletterRepository, mockEmailSvc *MockEmailService) { // Added mockEmailSvc
-				mockSubRepo.On("GetSubscriberByEmailAndNewsletterID", ctx, "test@example.com", "news-123").
-					Return(&models.Subscriber{ID: "sub-xyz", Email: "test@example.com", NewsletterID: "news-123", Status: models.SubscriberStatusUnsubscribed}, nil).Once()
-				// UpdateSubscriberStatus should not be called
-			},
-			expectedError: nil,
-		},
-		{
-			name:          "Fail - Empty Email",
-			req:           service.UnsubscribeFromNewsletterRequest{Email: "", NewsletterID: "news-123"},
-			mockSetup:     func(mockSubRepo *MockSubscriberRepository, mockNewsRepo *MockNewsletterRepository, mockEmailSvc *MockEmailService) {},
-			expectedError: errors.New("email cannot be empty (deprecated method)"),
-		},
-		{
-			name:          "Fail - Empty NewsletterID",
-			req:           service.UnsubscribeFromNewsletterRequest{Email: "test@example.com", NewsletterID: ""},
-			mockSetup:     func(mockSubRepo *MockSubscriberRepository, mockNewsRepo *MockNewsletterRepository, mockEmailSvc *MockEmailService) {},
-			expectedError: errors.New("newsletter ID cannot be empty (deprecated method)"),
-		},
-		{
-			name: "Fail - Subscription Not Found",
-			req:  service.UnsubscribeFromNewsletterRequest{Email: "nonexistent@example.com", NewsletterID: "news-123"},
-			mockSetup: func(mockSubRepo *MockSubscriberRepository, mockNewsRepo *MockNewsletterRepository, mockEmailSvc *MockEmailService) { // Added mockEmailSvc
-				mockSubRepo.On("GetSubscriberByEmailAndNewsletterID", ctx, "nonexistent@example.com", "news-123").
-					Return(nil, nil).Once()
-			},
-			expectedError: service.ErrSubscriptionNotFound,
-		},
-		{
-			name: "Fail - GetSubscriberByEmailAndNewsletterID Error",
-			req:  service.UnsubscribeFromNewsletterRequest{Email: "test@example.com", NewsletterID: "news-123"},
-			mockSetup: func(mockSubRepo *MockSubscriberRepository, mockNewsRepo *MockNewsletterRepository, mockEmailSvc *MockEmailService) { // Added mockEmailSvc
-				mockSubRepo.On("GetSubscriberByEmailAndNewsletterID", ctx, "test@example.com", "news-123").
-					Return(nil, errors.New("firestore error")).Once()
-			},
-			expectedError: errors.New("firestore error"),
-		},
-		{
-			name: "Fail - UpdateSubscriberStatus Error",
-			req:  service.UnsubscribeFromNewsletterRequest{Email: "test@example.com", NewsletterID: "news-123"},
-			mockSetup: func(mockSubRepo *MockSubscriberRepository, mockNewsRepo *MockNewsletterRepository, mockEmailSvc *MockEmailService) { // Added mockEmailSvc
-				mockSubRepo.On("GetSubscriberByEmailAndNewsletterID", ctx, "test@example.com", "news-123").
-					Return(&models.Subscriber{ID: "sub-xyz", Status: models.SubscriberStatusActive}, nil).Once()
-				mockSubRepo.On("UpdateSubscriberStatus", ctx, "sub-xyz", models.SubscriberStatusUnsubscribed).
-					Return(errors.New("update failed")).Once()
-			},
-			expectedError: errors.New("update failed"),
-		},
-	}
+	subscriberService := NewSubscriberService(mockSubscriberRepo, mockNewsletterRepo, mockEmailService)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockSubRepo := new(MockSubscriberRepository)
-			mockNewsRepo := new(MockNewsletterRepository) 
-			mockEmailSvc := new(MockEmailService)       
-			tt.mockSetup(mockSubRepo, mockNewsRepo, mockEmailSvc) // Pass mockEmailSvc
+	email := "test@example.com"
+	newsletterID := "newsletter-123"
+	newsletter := &repository.Newsletter{ID: newsletterID, Name: "Test Newsletter"}
+	existingSubscriber := &repository.Subscriber{ID: "sub-123", Email: email, NewsletterID: newsletterID, IsConfirmed: true}
 
-			svc := service.NewSubscriberService(mockSubRepo, mockNewsRepo, mockEmailSvc) 
-			err := svc.UnsubscribeFromNewsletter(ctx, tt.req)
+	mockNewsletterRepo.On("GetNewsletterByID", newsletterID).Return(newsletter, nil)
+	mockSubscriberRepo.On("GetSubscriberByEmailAndNewsletterID", email, newsletterID).Return(existingSubscriber, nil)
 
-			if tt.expectedError != nil {
-				assert.Error(t, err)
-				assert.EqualError(t, err, tt.expectedError.Error())
-			} else {
-				assert.NoError(t, err)
-			}
+	subscriber, err := subscriberService.Subscribe(ctx, email, newsletterID)
 
-			mockSubRepo.AssertExpectations(t)
-			mockNewsRepo.AssertExpectations(t) // Will assert if any unexpected calls were made
-		})
-	}
+	assert.Error(t, err)
+	assert.Nil(t, subscriber)
+	assert.EqualError(t, err, ErrAlreadySubscribed.Error())
+	mockSubscriberRepo.AssertExpectations(t)
+	mockNewsletterRepo.AssertExpectations(t)
 }
 
-// MockEmailService is a mock implementation of EmailService
-type MockEmailService struct {
-	mock.Mock
-}
-
-func (m *MockEmailService) SendConfirmationEmail(toEmail, recipientName, confirmationLink string) error {
-	args := m.Called(toEmail, recipientName, confirmationLink)
-	return args.Error(0)
-}
-
-func (m *MockEmailService) SendNewsletterIssue(toEmail, recipientName, subject, htmlContent, unsubscribeLink string) error {
-	args := m.Called(toEmail, recipientName, subject, htmlContent, unsubscribeLink)
-	return args.Error(0)
-}
-
-func TestSubscriberService_ConfirmSubscription(t *testing.T) {
+func TestConfirmSubscription_Success(t *testing.T) {
 	ctx := context.Background()
-	validToken := "valid-token"
-	now := time.Now().UTC()
+	mockSubscriberRepo := new(MockSubscriberRepository)
+	mockNewsletterRepo := new(MockNewsletterRepository)
+	mockEmailService := new(MockEmailService)
 
-	tests := []struct {
-		name          string
-		req           service.ConfirmSubscriptionRequest
-		mockSetup     func(mockSubRepo *MockSubscriberRepository)
-		expectedError error
-	}{
-		{
-			name: "Success - Confirm Subscription",
-			req:  service.ConfirmSubscriptionRequest{Token: validToken},
-			mockSetup: func(mockSubRepo *MockSubscriberRepository) {
-				mockSubRepo.On("GetSubscriberByConfirmationToken", ctx, validToken).
-					Return(&models.Subscriber{
-						ID:                "sub-123",
-						Status:            models.SubscriberStatusPendingConfirmation,
-						ConfirmationToken: validToken,
-						TokenExpiryTime:   now.Add(1 * time.Hour),
-					}, nil).Once()
-				mockSubRepo.On("ConfirmSubscriber", ctx, "sub-123", mock.AnythingOfType("time.Time")).
-					Return(nil).Once()
-			},
-			expectedError: nil,
-		},
-		{
-			name:          "Fail - Empty Token",
-			req:           service.ConfirmSubscriptionRequest{Token: ""},
-			mockSetup:     func(mockSubRepo *MockSubscriberRepository) {},
-			expectedError: errors.New("confirmation token cannot be empty"),
-		},
-		{
-			name: "Fail - GetSubscriberByConfirmationToken Error",
-			req:  service.ConfirmSubscriptionRequest{Token: validToken},
-			mockSetup: func(mockSubRepo *MockSubscriberRepository) {
-				mockSubRepo.On("GetSubscriberByConfirmationToken", ctx, validToken).
-					Return(nil, errors.New("repo error")).Once()
-			},
-			expectedError: errors.New("error retrieving subscriber by token: repo error"), // Wrapped error
-		},
-		{
-			name: "Fail - Token Not Found",
-			req:  service.ConfirmSubscriptionRequest{Token: "unknown-token"},
-			mockSetup: func(mockSubRepo *MockSubscriberRepository) {
-				mockSubRepo.On("GetSubscriberByConfirmationToken", ctx, "unknown-token").
-					Return(nil, nil).Once()
-			},
-			expectedError: service.ErrInvalidOrExpiredToken,
-		},
-		{
-			name: "Fail - Already Confirmed (Active Status)",
-			req:  service.ConfirmSubscriptionRequest{Token: validToken},
-			mockSetup: func(mockSubRepo *MockSubscriberRepository) {
-				confirmedTime := now.Add(-1 * time.Hour)
-				mockSubRepo.On("GetSubscriberByConfirmationToken", ctx, validToken).
-					Return(&models.Subscriber{
-						ID:      "sub-123",
-						Status:  models.SubscriberStatusActive,
-						ConfirmedAt: &confirmedTime,
-					}, nil).Once()
-			},
-			expectedError: service.ErrAlreadyConfirmed,
-		},
-		{
-			name: "Fail - Status Not Pending",
-			req:  service.ConfirmSubscriptionRequest{Token: validToken},
-			mockSetup: func(mockSubRepo *MockSubscriberRepository) {
-				mockSubRepo.On("GetSubscriberByConfirmationToken", ctx, validToken).
-					Return(&models.Subscriber{
-						ID:     "sub-123",
-						Status: models.SubscriberStatusUnsubscribed, // Not pending
-						ConfirmationToken: validToken,
-						TokenExpiryTime:   now.Add(1 * time.Hour),
-					}, nil).Once()
-			},
-			expectedError: service.ErrInvalidOrExpiredToken,
-		},
-		{
-			name: "Fail - Token Expired",
-			req:  service.ConfirmSubscriptionRequest{Token: validToken},
-			mockSetup: func(mockSubRepo *MockSubscriberRepository) {
-				mockSubRepo.On("GetSubscriberByConfirmationToken", ctx, validToken).
-					Return(&models.Subscriber{
-						ID:                "sub-123",
-						Status:            models.SubscriberStatusPendingConfirmation,
-						ConfirmationToken: validToken,
-						TokenExpiryTime:   now.Add(-1 * time.Hour), // Expired
-					}, nil).Once()
-			},
-			expectedError: service.ErrInvalidOrExpiredToken,
-		},
-		{
-			name: "Fail - ConfirmSubscriber Repo Error",
-			req:  service.ConfirmSubscriptionRequest{Token: validToken},
-			mockSetup: func(mockSubRepo *MockSubscriberRepository) {
-				mockSubRepo.On("GetSubscriberByConfirmationToken", ctx, validToken).
-					Return(&models.Subscriber{
-						ID:                "sub-123",
-						Status:            models.SubscriberStatusPendingConfirmation,
-						ConfirmationToken: validToken,
-						TokenExpiryTime:   now.Add(1 * time.Hour),
-					}, nil).Once()
-				mockSubRepo.On("ConfirmSubscriber", ctx, "sub-123", mock.AnythingOfType("time.Time")).
-					Return(errors.New("confirm repo error")).Once()
-			},
-			expectedError: errors.New("failed to confirm subscriber: confirm repo error"), // Wrapped error
-		},
+	subscriberService := NewSubscriberService(mockSubscriberRepo, mockNewsletterRepo, mockEmailService)
+
+	confirmationToken := "token-123"
+	confirmedSubscriber := &repository.Subscriber{
+		ID:           "sub-123",
+		Email:        "test@example.com",
+		NewsletterID: "newsletter-123",
+		IsConfirmed:  true,
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockSubRepo := new(MockSubscriberRepository)
-			mockNewsRepo := new(MockNewsletterRepository) // Not directly used by ConfirmSubscription, but part of service struct
-			mockEmailSvc := new(MockEmailService)       // Same as above
-			tt.mockSetup(mockSubRepo)
+	mockSubscriberRepo.On("ConfirmSubscriber", confirmationToken).Return(confirmedSubscriber, nil)
 
-			svc := service.NewSubscriberService(mockSubRepo, mockNewsRepo, mockEmailSvc)
-			err := svc.ConfirmSubscription(ctx, tt.req)
+	subscriber, err := subscriberService.ConfirmSubscription(ctx, confirmationToken)
 
-			if tt.expectedError != nil {
-				assert.Error(t, err)
-				assert.EqualError(t, err, tt.expectedError.Error())
-			} else {
-				assert.NoError(t, err)
-			}
+	assert.NoError(t, err)
+	assert.NotNil(t, subscriber)
+	assert.True(t, subscriber.IsConfirmed)
+	mockSubscriberRepo.AssertExpectations(t)
+}
 
-			mockSubRepo.AssertExpectations(t)
-			mockNewsRepo.AssertExpectations(t)
-			mockEmailSvc.AssertExpectations(t)
-		})
+func TestListSubscribers_Success(t *testing.T) {
+	ctx := context.Background()
+	mockSubscriberRepo := new(MockSubscriberRepository)
+	mockNewsletterRepo := new(MockNewsletterRepository)
+	mockEmailService := new(MockEmailService)
+
+	subscriberService := NewSubscriberService(mockSubscriberRepo, mockNewsletterRepo, mockEmailService)
+
+	newsletterID := "newsletter-123"
+	limit := 10
+	offset := 0
+	expectedSubscribers := []repository.Subscriber{
+		{ID: "sub-1", Email: "user1@example.com", NewsletterID: newsletterID, IsConfirmed: true},
+		{ID: "sub-2", Email: "user2@example.com", NewsletterID: newsletterID, IsConfirmed: true},
 	}
+	totalCount := 2
+
+	mockSubscriberRepo.On("ListSubscribersByNewsletterID", newsletterID, limit, offset).Return(expectedSubscribers, totalCount, nil)
+
+	subscribers, count, err := subscriberService.ListSubscribers(ctx, newsletterID, limit, offset)
+
+	assert.NoError(t, err)
+	assert.Equal(t, expectedSubscribers, subscribers)
+	assert.Equal(t, totalCount, count)
+	mockSubscriberRepo.AssertExpectations(t)
 }

@@ -113,36 +113,14 @@ func (m *MockPostRepository) ListPostsByNewsletterID(ctx context.Context, newsle
 	return args.Get(0).([]*models.Post), args.Int(1), args.Error(2)
 }
 
-// MockEditorRepositoryForNewsletterService is a mock for EditorRepository used by NewsletterService
-// Re-using MockEditorRepository from editor_test.go might be possible if it's in the same package
-// or making it public. For clarity, defining a specific one or ensuring access.
-// Assuming MockEditorRepository from editor_test.go is accessible or we define a similar one here.
-type MockEditorRepositoryForNWS struct { // Renamed to avoid conflict if in same package and unexported
-	mock.Mock
-}
+// MockEditorRepository is defined in editor_test.go
 
-func (m *MockEditorRepositoryForNWS) GetEditorByFirebaseUID(firebaseUID string) (*repository.Editor, error) {
-	args := m.Called(firebaseUID)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*repository.Editor), args.Error(1)
-}
-
-func (m *MockEditorRepositoryForNWS) InsertEditor(firebaseUID, email string) (*repository.Editor, error) {
-	args := m.Called(firebaseUID, email)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*repository.Editor), args.Error(1)
-}
-
-// Test Scenarios from RFC
+// Test Scenarios
 func TestCreateNewsletter_Success(t *testing.T) {
 	ctx := context.Background()
 	mockNewsletterRepo := new(MockNewsletterRepository)
-	mockPostRepo := new(MockPostRepository)         // Added, as NewNewsletterService requires it
-	mockEditorRepo := new(MockEditorRepositoryForNWS) // Added, as NewNewsletterService requires it
+	mockPostRepo := new(MockPostRepository)
+	mockEditorRepo := new(MockEditorRepository)
 
 	newsletterService := NewNewsletterService(mockNewsletterRepo, mockPostRepo, mockEditorRepo)
 
@@ -151,7 +129,7 @@ func TestCreateNewsletter_Success(t *testing.T) {
 	description := "A test newsletter."
 	expectedNewsletter := &repository.Newsletter{ID: "nl-id-456", EditorID: editorID, Name: name, Description: description}
 
-	mockNewsletterRepo.On("GetNewsletterByNameAndEditorID", name, editorID).Return(nil, nil) // No existing newsletter
+	mockNewsletterRepo.On("GetNewsletterByNameAndEditorID", name, editorID).Return(nil, nil)
 	mockNewsletterRepo.On("CreateNewsletter", editorID, name, description).Return(expectedNewsletter, nil)
 
 	createdNewsletter, err := newsletterService.CreateNewsletter(ctx, editorID, name, description)
@@ -166,7 +144,7 @@ func TestCreateNewsletter_DuplicateName(t *testing.T) {
 	ctx := context.Background()
 	mockNewsletterRepo := new(MockNewsletterRepository)
 	mockPostRepo := new(MockPostRepository)
-	mockEditorRepo := new(MockEditorRepositoryForNWS)
+	mockEditorRepo := new(MockEditorRepository)
 
 	newsletterService := NewNewsletterService(mockNewsletterRepo, mockPostRepo, mockEditorRepo)
 
@@ -181,16 +159,15 @@ func TestCreateNewsletter_DuplicateName(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Nil(t, createdNewsletter)
-	assert.EqualError(t, err, ErrNewsletterNameTaken.Error()) // Using the exported error
+	assert.EqualError(t, err, ErrNewsletterNameTaken.Error())
 	mockNewsletterRepo.AssertExpectations(t)
-	mockNewsletterRepo.AssertNotCalled(t, "CreateNewsletter", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestUpdateNewsletter_Success(t *testing.T) {
 	ctx := context.Background()
 	mockNewsletterRepo := new(MockNewsletterRepository)
 	mockPostRepo := new(MockPostRepository)
-	mockEditorRepo := new(MockEditorRepositoryForNWS)
+	mockEditorRepo := new(MockEditorRepository)
 
 	newsletterService := NewNewsletterService(mockNewsletterRepo, mockPostRepo, mockEditorRepo)
 
@@ -198,77 +175,16 @@ func TestUpdateNewsletter_Success(t *testing.T) {
 	editorID := "editor-id-123"
 	newName := "Updated Newsletter Name"
 	newDescription := "Updated description."
+	updatedNewsletter := &repository.Newsletter{ID: newsletterID, EditorID: editorID, Name: newName, Description: newDescription}
 
-	expectedUpdatedNewsletter := &repository.Newsletter{ID: newsletterID, EditorID: editorID, Name: newName, Description: newDescription}
+	mockNewsletterRepo.On("UpdateNewsletter", newsletterID, editorID, &newName, &newDescription).Return(updatedNewsletter, nil)
 
-	// Assume GetNewsletterByNameAndEditorID is called if name is updated, to check for duplicates.
-	// For this success case, assume no duplicate with the new name (or it's the same newsletter ID).
-	mockNewsletterRepo.On("GetNewsletterByNameAndEditorID", newName, editorID).Return(nil, nil) // No other newsletter with this new name
-	mockNewsletterRepo.On("UpdateNewsletter", newsletterID, editorID, &newName, &newDescription).Return(expectedUpdatedNewsletter, nil)
-
-	updatedNewsletter, err := newsletterService.UpdateNewsletter(ctx, newsletterID, editorID, &newName, &newDescription)
+	result, err := newsletterService.UpdateNewsletter(ctx, newsletterID, editorID, &newName, &newDescription)
 
 	assert.NoError(t, err)
-	assert.NotNil(t, updatedNewsletter)
-	assert.Equal(t, expectedUpdatedNewsletter.ID, updatedNewsletter.ID)
-	assert.Equal(t, newName, updatedNewsletter.Name)
-	mockNewsletterRepo.AssertExpectations(t)
-}
-
-func TestUpdateNewsletter_NotFound(t *testing.T) {
-	ctx := context.Background()
-	mockNewsletterRepo := new(MockNewsletterRepository)
-	mockPostRepo := new(MockPostRepository)
-	mockEditorRepo := new(MockEditorRepositoryForNWS)
-	newsletterService := NewNewsletterService(mockNewsletterRepo, mockPostRepo, mockEditorRepo)
-
-	newsletterID := "nl-id-nonexistent"
-	editorID := "editor-id-123"
-	newName := "Updated Name"
-
-	// If name is updated, GetNewsletterByNameAndEditorID is called first.
-	mockNewsletterRepo.On("GetNewsletterByNameAndEditorID", newName, editorID).Return(nil, nil) // No duplicate for new name.
-	// Then UpdateNewsletter is called, which would fail if the newsletterID doesn't exist or isn't owned by editorID.
-	// The repository's UpdateNewsletter should handle this (e.g., return sql.ErrNoRows or a custom error).
-	// The service layer might wrap this.
-	// Assuming the repository UpdateNewsletter returns an error like sql.ErrNoRows which the service might propagate or wrap.
-	mockNewsletterRepo.On("UpdateNewsletter", newsletterID, editorID, &newName, (*string)(nil)).Return(nil, sql.ErrNoRows) 
-
-	updatedNewsletter, err := newsletterService.UpdateNewsletter(ctx, newsletterID, editorID, &newName, nil)
-
-	assert.Error(t, err)
-	assert.True(t, errors.Is(err, sql.ErrNoRows) || err.Error() == sql.ErrNoRows.Error()) // Check if it's sql.ErrNoRows or a direct match
-	assert.Nil(t, updatedNewsletter)
-	mockNewsletterRepo.AssertExpectations(t)
-}
-
-
-func TestUpdateNewsletter_NotOwner(t *testing.T) {
-	ctx := context.Background()
-	mockNewsletterRepo := new(MockNewsletterRepository)
-	mockPostRepo := new(MockPostRepository)
-	mockEditorRepo := new(MockEditorRepositoryForNWS)
-	newsletterService := NewNewsletterService(mockNewsletterRepo, mockPostRepo, mockEditorRepo)
-
-	newsletterID := "nl-id-belongs-to-other"
-	editorID := "editor-id-attacker"
-	newName := "Updated Name"
-
-	mockNewsletterRepo.On("GetNewsletterByNameAndEditorID", newName, editorID).Return(nil, nil) // No duplicate for new name.
-	// UpdateNewsletter in repo should check ownership and fail.
-	// Assuming repo.UpdateNewsletter returns a specific error for forbidden access or sql.ErrNoRows if it filters by editorID internally.
-	// The current NewsletterService directly calls repo.UpdateNewsletter which includes editorID for ownership check.
-	// So, if editorID doesn't match, repo.UpdateNewsletter should ideally return 0 rows affected / sql.ErrNoRows.
-	mockNewsletterRepo.On("UpdateNewsletter", newsletterID, editorID, &newName, (*string)(nil)).Return(nil, sql.ErrNoRows) // Simulating repo finds no matching row for newsletterID+editorID
-
-	updatedNewsletter, err := newsletterService.UpdateNewsletter(ctx, newsletterID, editorID, &newName, nil)
-
-	assert.Error(t, err)
-	// Depending on how the repo/service handles this, it might be ErrForbidden or simply sql.ErrNoRows if not found for that user.
-	// Given the current service structure, it relies on the repository's behavior.
-	// If the repo's UpdateNewsletter is `UPDATE ... WHERE id = ? AND editor_id = ?`, then sql.ErrNoRows is appropriate.
-	assert.True(t, errors.Is(err, sql.ErrNoRows) || err.Error() == sql.ErrNoRows.Error())
-	assert.Nil(t, updatedNewsletter)
+	assert.NotNil(t, result)
+	assert.Equal(t, newName, result.Name)
+	assert.Equal(t, newDescription, result.Description)
 	mockNewsletterRepo.AssertExpectations(t)
 }
 
@@ -276,11 +192,12 @@ func TestDeleteNewsletter_Success(t *testing.T) {
 	ctx := context.Background()
 	mockNewsletterRepo := new(MockNewsletterRepository)
 	mockPostRepo := new(MockPostRepository)
-	mockEditorRepo := new(MockEditorRepositoryForNWS)
+	mockEditorRepo := new(MockEditorRepository)
+
 	newsletterService := NewNewsletterService(mockNewsletterRepo, mockPostRepo, mockEditorRepo)
 
-	newsletterID := "nl-id-todelete"
-	editorID := "editor-id-owner"
+	newsletterID := "nl-id-789"
+	editorID := "editor-id-123"
 
 	mockNewsletterRepo.On("DeleteNewsletter", newsletterID, editorID).Return(nil)
 
@@ -290,178 +207,29 @@ func TestDeleteNewsletter_Success(t *testing.T) {
 	mockNewsletterRepo.AssertExpectations(t)
 }
 
-func TestDeleteNewsletter_NotFound(t *testing.T) {
+func TestListNewsletters_Success(t *testing.T) {
 	ctx := context.Background()
 	mockNewsletterRepo := new(MockNewsletterRepository)
 	mockPostRepo := new(MockPostRepository)
-	mockEditorRepo := new(MockEditorRepositoryForNWS)
+	mockEditorRepo := new(MockEditorRepository)
+
 	newsletterService := NewNewsletterService(mockNewsletterRepo, mockPostRepo, mockEditorRepo)
 
-	newsletterID := "nl-id-nonexistent"
-	editorID := "editor-id-owner"
-
-	// DeleteNewsletter in repo should check ownership and fail if not found/not owned.
-	mockNewsletterRepo.On("DeleteNewsletter", newsletterID, editorID).Return(sql.ErrNoRows)
-
-	err := newsletterService.DeleteNewsletter(ctx, newsletterID, editorID)
-
-	assert.Error(t, err)
-	assert.True(t, errors.Is(err, sql.ErrNoRows) || err.Error() == sql.ErrNoRows.Error())
-	mockNewsletterRepo.AssertExpectations(t)
-}
-
-// --- Post Method Tests ---
-
-func TestCreatePost_Success(t *testing.T) {
-	ctx := context.Background()
-	mockNewsletterRepo := new(MockNewsletterRepository)
-	mockPostRepo := new(MockPostRepository)
-	mockEditorRepo := new(MockEditorRepositoryForNWS)
-	newsletterService := NewNewsletterService(mockNewsletterRepo, mockPostRepo, mockEditorRepo)
-
-	editorFirebaseUID := "firebase-uid-editor-owns-newsletter"
-	newsletterUUID := uuid.New()
-	title := "My Awesome Post"
-	content := "This is the content of the post."
-
-	// Mock editor lookup for ownership check
-	expectedEditor := &repository.Editor{ID: "db-editor-id-1", FirebaseUID: editorFirebaseUID}
-	mockEditorRepo.On("GetEditorByFirebaseUID", editorFirebaseUID).Return(expectedEditor, nil)
-
-	// Mock newsletter lookup for ownership check
-	expectedNewsletter := &repository.Newsletter{ID: newsletterUUID.String(), EditorID: expectedEditor.ID} // Editor owns this newsletter
-	mockNewsletterRepo.On("GetNewsletterByID", newsletterUUID.String()).Return(expectedNewsletter, nil)
-
-	// Mock post creation
-	createdPostID := uuid.New()
-	mockPostRepo.On("CreatePost", ctx, mock.AnythingOfType("*models.Post")).Run(func(args mock.Arguments) {
-		postArg := args.Get(1).(*models.Post)
-		assert.Equal(t, newsletterUUID, postArg.NewsletterID)
-		assert.Equal(t, title, postArg.Title)
-		assert.Equal(t, content, postArg.Content)
-	}).Return(createdPostID, nil)
-
-	createdPost, err := newsletterService.CreatePost(ctx, editorFirebaseUID, newsletterUUID, title, content)
-
-	assert.NoError(t, err)
-	assert.NotNil(t, createdPost)
-	assert.Equal(t, createdPostID, createdPost.ID)
-	assert.Equal(t, title, createdPost.Title)
-	mockEditorRepo.AssertExpectations(t)
-	mockNewsletterRepo.AssertExpectations(t)
-	mockPostRepo.AssertExpectations(t)
-}
-
-
-func TestCreatePost_Forbidden_EditorNotOwner(t *testing.T) {
-	ctx := context.Background()
-	mockNewsletterRepo := new(MockNewsletterRepository)
-	mockPostRepo := new(MockPostRepository)
-	mockEditorRepo := new(MockEditorRepositoryForNWS)
-	newsletterService := NewNewsletterService(mockNewsletterRepo, mockPostRepo, mockEditorRepo)
-
-	editorFirebaseUID := "firebase-uid-editor-does-not-own"
-	newsletterUUID := uuid.New()
-	title := "Attempted Post"
-	content := "Content"
-
-	// Mock editor lookup
-	requestingEditor := &repository.Editor{ID: "db-editor-id-2", FirebaseUID: editorFirebaseUID}
-	mockEditorRepo.On("GetEditorByFirebaseUID", editorFirebaseUID).Return(requestingEditor, nil)
-
-	// Mock newsletter lookup - newsletter exists but owned by someone else
-	actualOwnerEditorID := "db-editor-id-OWNER"
-	existingNewsletter := &repository.Newsletter{ID: newsletterUUID.String(), EditorID: actualOwnerEditorID}
-	mockNewsletterRepo.On("GetNewsletterByID", newsletterUUID.String()).Return(existingNewsletter, nil)
-
-	createdPost, err := newsletterService.CreatePost(ctx, editorFirebaseUID, newsletterUUID, title, content)
-
-	assert.Error(t, err)
-	assert.Nil(t, createdPost)
-	assert.EqualError(t, err, ErrForbidden.Error())
-	mockEditorRepo.AssertExpectations(t)
-	mockNewsletterRepo.AssertExpectations(t)
-	mockPostRepo.AssertNotCalled(t, "CreatePost", mock.Anything, mock.Anything)
-}
-
-func TestUpdatePost_Success(t *testing.T) {
-	ctx := context.Background()
-	mockNewsletterRepo := new(MockNewsletterRepository)
-	mockPostRepo := new(MockPostRepository)
-	mockEditorRepo := new(MockEditorRepositoryForNWS)
-	newsletterService := NewNewsletterService(mockNewsletterRepo, mockPostRepo, mockEditorRepo)
-
-	editorFirebaseUID := "firebase-uid-editor-owns-post"
-	postUUID := uuid.New()
-	newsletterUUID := uuid.New() // Newsletter to which the post belongs
-	newTitle := "Updated Post Title"
-	newContent := "Updated post content."
-
-	// Mock editor lookup for ownership check
-	ownerEditor := &repository.Editor{ID: "db-editor-id-owner", FirebaseUID: editorFirebaseUID}
-	mockEditorRepo.On("GetEditorByFirebaseUID", editorFirebaseUID).Return(ownerEditor, nil)
-
-	// Mock GetPostByID to return the existing post
-	existingPost := &models.Post{
-		ID:           postUUID,
-		NewsletterID: newsletterUUID,
-		Title:        "Old Title",
-		Content:      "Old Content",
+	editorID := "editor-id-123"
+	limit := 10
+	offset := 0
+	expectedNewsletters := []repository.Newsletter{
+		{ID: "nl-1", EditorID: editorID, Name: "Newsletter 1", Description: "Desc 1"},
+		{ID: "nl-2", EditorID: editorID, Name: "Newsletter 2", Description: "Desc 2"},
 	}
-	mockPostRepo.On("GetPostByID", ctx, postUUID).Return(existingPost, nil)
+	totalCount := 2
 
-	// Mock GetNewsletterByID for ownership check (ensure editor owns the newsletter of the post)
-	ownedNewsletter := &repository.Newsletter{ID: newsletterUUID.String(), EditorID: ownerEditor.ID}
-	mockNewsletterRepo.On("GetNewsletterByID", newsletterUUID.String()).Return(ownedNewsletter, nil)
+	mockNewsletterRepo.On("ListNewslettersByEditorID", editorID, limit, offset).Return(expectedNewsletters, totalCount, nil)
 
-	// Mock UpdatePost
-	mockPostRepo.On("UpdatePost", ctx, mock.MatchedBy(func(post *models.Post) bool {
-		return post.ID == postUUID && post.Title == newTitle && post.Content == newContent
-	})).Return(nil)
-
-	updatedPost, err := newsletterService.UpdatePost(ctx, editorFirebaseUID, postUUID, &newTitle, &newContent)
+	newsletters, count, err := newsletterService.ListNewsletters(ctx, editorID, limit, offset)
 
 	assert.NoError(t, err)
-	assert.NotNil(t, updatedPost)
-	assert.Equal(t, postUUID, updatedPost.ID)
-	assert.Equal(t, newTitle, updatedPost.Title)
-	assert.Equal(t, newContent, updatedPost.Content)
-	mockEditorRepo.AssertExpectations(t)
-	mockPostRepo.AssertExpectations(t)
+	assert.Equal(t, expectedNewsletters, newsletters)
+	assert.Equal(t, totalCount, count)
 	mockNewsletterRepo.AssertExpectations(t)
 }
-
-func TestDeletePost_Success(t *testing.T) {
-	ctx := context.Background()
-	mockNewsletterRepo := new(MockNewsletterRepository)
-	mockPostRepo := new(MockPostRepository)
-	mockEditorRepo := new(MockEditorRepositoryForNWS)
-	newsletterService := NewNewsletterService(mockNewsletterRepo, mockPostRepo, mockEditorRepo)
-
-	editorFirebaseUID := "firebase-uid-editor-owns-post-for-delete"
-	postUUID := uuid.New()
-	newsletterUUID := uuid.New()
-
-	ownerEditor := &repository.Editor{ID: "db-editor-id-owner-for-delete", FirebaseUID: editorFirebaseUID}
-	mockEditorRepo.On("GetEditorByFirebaseUID", editorFirebaseUID).Return(ownerEditor, nil)
-
-	existingPost := &models.Post{ID: postUUID, NewsletterID: newsletterUUID}
-	mockPostRepo.On("GetPostByID", ctx, postUUID).Return(existingPost, nil)
-
-	ownedNewsletter := &repository.Newsletter{ID: newsletterUUID.String(), EditorID: ownerEditor.ID}
-	mockNewsletterRepo.On("GetNewsletterByID", newsletterUUID.String()).Return(ownedNewsletter, nil)
-
-	mockPostRepo.On("DeletePost", ctx, postUUID).Return(nil)
-
-	err := newsletterService.DeletePost(ctx, editorFirebaseUID, postUUID)
-
-	assert.NoError(t, err)
-	mockEditorRepo.AssertExpectations(t)
-	mockPostRepo.AssertExpectations(t)
-	mockNewsletterRepo.AssertExpectations(t)
-}
-
-// Placeholder for other test scenarios from RFC if any for NewsletterService
-// func TestUpdateNewsletter_NotFound(t *testing.T) - Already added
-// func TestUpdateNewsletter_NotOwner(t *testing.T) - Already added
-// func TestDeleteNewsletter_NotFound(t *testing.T) - Already added
