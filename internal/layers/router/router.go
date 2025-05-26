@@ -1,6 +1,7 @@
 package router
 
 import (
+	"fmt"
 	"net/http"
 
 	"log"
@@ -66,13 +67,29 @@ func Router() http.Handler {
 		w.Write([]byte("ok"))
 	})
 
-	// Swagger documentation endpoints
-	mux.HandleFunc("/swagger/", httpSwagger.Handler(
-		httpSwagger.URL("http://localhost:8080/docs/openapi.yaml"),
-	))
-	mux.HandleFunc("/docs/", httpSwagger.Handler(
-		httpSwagger.URL("http://localhost:8080/docs/openapi.yaml"),
-	))
+	// Swagger documentation endpoints with dynamic URL
+	mux.HandleFunc("/swagger/", func(w http.ResponseWriter, r *http.Request) {
+		// Build dynamic URL based on request
+		scheme := "http"
+		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+			scheme = "https"
+		}
+		host := r.Host
+		specURL := fmt.Sprintf("%s://%s/docs/openapi.yaml", scheme, host)
+		
+		httpSwagger.Handler(httpSwagger.URL(specURL))(w, r)
+	})
+	mux.HandleFunc("/docs/", func(w http.ResponseWriter, r *http.Request) {
+		// Build dynamic URL based on request
+		scheme := "http"
+		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+			scheme = "https"
+		}
+		host := r.Host
+		specURL := fmt.Sprintf("%s://%s/docs/openapi.yaml", scheme, host)
+		
+		httpSwagger.Handler(httpSwagger.URL(specURL))(w, r)
+	})
 	
 	// Serve the OpenAPI spec file
 	mux.HandleFunc("/docs/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
