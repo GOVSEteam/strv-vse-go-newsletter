@@ -2,14 +2,15 @@ package subscriber_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	h "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/subscriber"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -42,12 +43,12 @@ func (m *MockSubscriberService) UnsubscribeByToken(ctx context.Context, token st
 	return args.Error(0)
 }
 
-func (m *MockSubscriberService) ListSubscribersByNewsletterID(ctx context.Context, newsletterID string, limit int, offset int) ([]service.SubscriberResponse, int, error) {
-	args := m.Called(ctx, newsletterID, limit, offset)
+func (m *MockSubscriberService) GetActiveSubscribersForNewsletter(ctx context.Context, newsletterID string) ([]models.Subscriber, error) {
+	args := m.Called(ctx, newsletterID)
 	if args.Get(0) == nil {
-		return nil, args.Int(1), args.Error(2)
+		return nil, args.Error(1)
 	}
-	return args.Get(0).([]service.SubscriberResponse), args.Int(1), args.Error(2)
+	return args.Get(0).([]models.Subscriber), args.Error(1)
 }
 
 func TestSubscribeHandler(t *testing.T) {
@@ -59,7 +60,10 @@ func TestSubscribeHandler(t *testing.T) {
 			Email: "test@example.com",
 		}
 		expectedResponse := &service.SubscribeToNewsletterResponse{
-			Message: "Subscription successful",
+			SubscriberID: "sub-123",
+			Email:        "test@example.com",
+			NewsletterID: "newsletter-123",
+			Status:       models.SubscriberStatusPendingConfirmation,
 		}
 
 		mockService.On("SubscribeToNewsletter", mock.Anything, mock.MatchedBy(func(req service.SubscribeToNewsletterRequest) bool {

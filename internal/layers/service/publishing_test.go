@@ -108,7 +108,8 @@ func (m *MockEmailService) SendNewsletterIssue(toEmail, recipientName, subject, 
 
 // Add other methods from email.EmailService to satisfy the interface
 func (m *MockEmailService) SendConfirmationEmail(toEmail, recipientName, confirmationLink string) error {
-	panic("SendConfirmationEmail should not be called in publishing tests")
+	args := m.Called(toEmail, recipientName, confirmationLink)
+	return args.Error(0)
 }
 
 func TestPublishPostToSubscribers_Success(t *testing.T) {

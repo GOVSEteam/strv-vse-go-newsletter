@@ -10,6 +10,7 @@ import (
 
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/auth"
 	h "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/post"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -25,6 +26,27 @@ type MockPublishingService struct {
 func (m *MockPublishingService) PublishPostToSubscribers(ctx context.Context, postID string, editorFirebaseUID string) error {
 	args := m.Called(ctx, postID, editorFirebaseUID)
 	return args.Error(0)
+}
+
+// MockEditorRepository is a mock implementation of EditorRepositoryInterface
+type MockEditorRepository struct {
+	mock.Mock
+}
+
+func (m *MockEditorRepository) InsertEditor(firebaseUID, email string) (*repository.Editor, error) {
+	args := m.Called(firebaseUID, email)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*repository.Editor), args.Error(1)
+}
+
+func (m *MockEditorRepository) GetEditorByFirebaseUID(firebaseUID string) (*repository.Editor, error) {
+	args := m.Called(firebaseUID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*repository.Editor), args.Error(1)
 }
 
 func TestPublishPostHandler(t *testing.T) {

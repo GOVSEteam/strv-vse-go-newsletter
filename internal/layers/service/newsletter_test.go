@@ -2,8 +2,6 @@ package service
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"testing"
 	"time"
 
@@ -177,6 +175,7 @@ func TestUpdateNewsletter_Success(t *testing.T) {
 	newDescription := "Updated description."
 	updatedNewsletter := &repository.Newsletter{ID: newsletterID, EditorID: editorID, Name: newName, Description: newDescription}
 
+	mockNewsletterRepo.On("GetNewsletterByNameAndEditorID", newName, editorID).Return(nil, nil) // No existing newsletter with new name
 	mockNewsletterRepo.On("UpdateNewsletter", newsletterID, editorID, &newName, &newDescription).Return(updatedNewsletter, nil)
 
 	result, err := newsletterService.UpdateNewsletter(ctx, newsletterID, editorID, &newName, &newDescription)
@@ -226,7 +225,7 @@ func TestListNewsletters_Success(t *testing.T) {
 
 	mockNewsletterRepo.On("ListNewslettersByEditorID", editorID, limit, offset).Return(expectedNewsletters, totalCount, nil)
 
-	newsletters, count, err := newsletterService.ListNewsletters(ctx, editorID, limit, offset)
+	newsletters, count, err := newsletterService.ListNewslettersByEditorID(ctx, editorID, limit, offset)
 
 	assert.NoError(t, err)
 	assert.Equal(t, expectedNewsletters, newsletters)
