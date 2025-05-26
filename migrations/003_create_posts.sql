@@ -1,3 +1,4 @@
+-- +goose Up
 CREATE TABLE IF NOT EXISTS posts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     newsletter_id UUID NOT NULL REFERENCES newsletters(id) ON DELETE CASCADE,
@@ -8,5 +9,8 @@ CREATE TABLE IF NOT EXISTS posts (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Optional: Add an index on newsletter_id for faster lookups of posts by newsletter
 CREATE INDEX IF NOT EXISTS idx_posts_newsletter_id ON posts(newsletter_id);
+
+-- +goose Down
+DROP INDEX IF EXISTS idx_posts_newsletter_id;
+DROP TABLE IF EXISTS posts; 

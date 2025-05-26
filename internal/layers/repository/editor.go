@@ -2,7 +2,11 @@ package repository
 
 import (
 	"database/sql"
+	"errors"
 )
+
+// ErrEditorNotFound is returned when an editor is not found
+var ErrEditorNotFound = errors.New("editor not found")
 
 type Editor struct {
 	ID          string
@@ -36,6 +40,9 @@ func (r *PostgresEditorRepo) GetEditorByFirebaseUID(firebaseUID string) (*Editor
 	row := r.db.QueryRow(`SELECT id, firebase_uid, email FROM editors WHERE firebase_uid = $1`, firebaseUID)
 	var e Editor
 	if err := row.Scan(&e.ID, &e.FirebaseUID, &e.Email); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrEditorNotFound
+		}
 		return nil, err
 	}
 	return &e, nil
