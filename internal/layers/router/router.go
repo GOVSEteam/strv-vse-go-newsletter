@@ -14,6 +14,10 @@ import (
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/pkg/email" // Added email package
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/setup"
+	
+	// Swagger imports
+	_ "github.com/GOVSEteam/strv-vse-go-newsletter/docs" // Import docs for swagger
+	"github.com/swaggo/http-swagger"
 )
 
 func Router() http.Handler {
@@ -61,6 +65,10 @@ func Router() http.Handler {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))
 	})
+
+	// Swagger documentation endpoints
+	mux.HandleFunc("/swagger/", httpSwagger.WrapHandler)
+	mux.HandleFunc("/docs/", httpSwagger.WrapHandler)
 
 	// Editor routes - assuming these are still correct
 	mux.HandleFunc("/editor/signup", editor.EditorSignUpHandler(editorService))

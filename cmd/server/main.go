@@ -1,3 +1,23 @@
+// Newsletter API
+//
+// A comprehensive API for managing newsletters, posts, and subscribers
+//
+//	Title: Newsletter API
+//	Description: A comprehensive API for managing newsletters, posts, and subscribers
+//	Version: 1.0.0
+//	Host: localhost:8080
+//	BasePath: /
+//	Schemes: http, https
+//
+//	SecurityDefinitions:
+//	  BearerAuth:
+//	    type: apiKey
+//	    in: header
+//	    name: Authorization
+//	    description: Firebase JWT token (add 'Bearer ' prefix)
+//
+// @contact.name Newsletter API Support
+// @contact.email support@newsletter-api.com
 package main
 
 import (
@@ -7,6 +27,9 @@ import (
 
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/router"
 	"github.com/joho/godotenv"
+	
+	// Import docs for swagger
+	_ "github.com/GOVSEteam/strv-vse-go-newsletter/docs"
 )
 
 func main() {
