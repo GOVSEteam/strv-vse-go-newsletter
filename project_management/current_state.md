@@ -147,13 +147,12 @@ The codebase shows a solid foundation with clean architecture, proper separation
 
 #### Implemented
 
-- ✅ `SubscriberService` with `SubscribeToNewsletter`, `ConfirmSubscription`, `UnsubscribeByToken`, and `GetActiveSubscribersForNewsletter` methods.
+- ✅ `SubscriberService` with `SubscribeToNewsletter`, `UnsubscribeByToken`, and `GetActiveSubscribersForNewsletter` methods.
 - ✅ `SubscriberRepository` (Firestore implementation) for subscriber data persistence, including methods for token-based operations and fetching active subscribers (`DB-004`).
 - ✅ `models.Subscriber` updated with `UnsubscribeToken`.
-- ✅ `SubscribeToNewsletter` flow generates unique `confirmation_token` and `unsubscribe_token`.
+- ✅ `SubscribeToNewsletter` flow generates unique `unsubscribe_token`.
 - ✅ Handlers for all subscriber operations:
   - `POST /api/newsletters/{id}/subscribe` (`API-SUB-001`, `subscriberHandler.SubscribeHandler`)
-  - `GET /api/subscribers/confirm?token={token}` (`subscriberHandler.ConfirmSubscriptionHandler`)
   - `GET /api/subscriptions/unsubscribe?token={token}` (`API-SUB-002`, `subscriberHandler.UnsubscribeHandler`)
 - ✅ Token-based unsubscription implemented.
 - ✅ Integration with `EmailService` for sending confirmation emails (`MAIL-002` via `ResendService` or `ConsoleEmailService`).
