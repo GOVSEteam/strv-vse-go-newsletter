@@ -17,6 +17,8 @@ var ErrNewsletterNameTaken = errors.New("newsletter name already taken by this e
 var ErrPostNotFound = errors.New("post not found")
 var ErrServiceNewsletterNotFound = errors.New("newsletter not found in newsletter service") // Renamed
 var ErrForbidden = errors.New("forbidden: editor does not own this resource")
+var ErrPostTitleEmpty = errors.New("post title cannot be empty") // New Error
+var ErrPostContentEmpty = errors.New("post content cannot be empty") // New Error
 
 type NewsletterServiceInterface interface {
 	// Newsletter methods
@@ -153,10 +155,10 @@ func (s *newsletterService) CreatePost(ctx context.Context, editorFirebaseUID st
 	}
 
 	if title == "" {
-		return nil, errors.New("post title cannot be empty")
+		return nil, ErrPostTitleEmpty
 	}
 	if content == "" {
-		return nil, errors.New("post content cannot be empty")
+		return nil, ErrPostContentEmpty
 	}
 
 	post := &models.Post{

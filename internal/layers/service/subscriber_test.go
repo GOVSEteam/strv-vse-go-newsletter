@@ -260,14 +260,14 @@ func TestSubscriberService_UnsubscribeFromNewsletter(t *testing.T) {
 			req:  service.UnsubscribeFromNewsletterRequest{Email: "", NewsletterID: "news-123"},
 			mockSetup: func(mockSubRepo *MockSubscriberRepository, mockNewsRepo *MockNewsletterRepository, mockEmailSvc *MockEmailService) {
 			}, // Added mockEmailSvc
-			expectedError: errors.New("email cannot be empty"),
+			expectedError: errors.New("email cannot be empty (deprecated method)"),
 		},
 		{
 			name: "Fail - Empty NewsletterID",
 			req:  service.UnsubscribeFromNewsletterRequest{Email: "test@example.com", NewsletterID: ""},
 			mockSetup: func(mockSubRepo *MockSubscriberRepository, mockNewsRepo *MockNewsletterRepository, mockEmailSvc *MockEmailService) {
 			}, // Added mockEmailSvc
-			expectedError: errors.New("newsletter ID cannot be empty"),
+			expectedError: errors.New("newsletter ID cannot be empty (deprecated method)"),
 		},
 		{
 			name: "Fail - Subscription Not Found",
