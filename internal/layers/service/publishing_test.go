@@ -31,22 +31,71 @@ func (m *MockNewsletterService) MarkPostAsPublished(ctx context.Context, editorF
 	return args.Error(0)
 }
 
-// Default behavior for unexpected calls
-func (m *MockNewsletterService) DefaultMockBehavior(methodName string, args ...interface{}) {
-	m.T.Fatalf("Unexpected call to %s with args: %v", methodName, args)
+// Newsletter methods required by NewsletterServiceInterface
+func (m *MockNewsletterService) ListNewslettersByEditorID(ctx context.Context, editorID string, limit int, offset int) ([]repository.Newsletter, int, error) {
+	args := m.Called(ctx, editorID, limit, offset)
+	return args.Get(0).([]repository.Newsletter), args.Int(1), args.Error(2)
 }
 
-// Remove panic-based stubs; rely on default behavior for unexpected calls
-func (m *MockNewsletterService) GetPostsByNewsletterID(ctx context.Context, editorFirebaseUID string, newsletterID uuid.UUID, limit, offset int, statusFilter string) ([]models.Post, int, error) {
-	panic("GetPostsByNewsletterID should not be called in publishing tests")
+func (m *MockNewsletterService) CreateNewsletter(ctx context.Context, editorID, name, description string) (*repository.Newsletter, error) {
+	args := m.Called(ctx, editorID, name, description)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*repository.Newsletter), args.Error(1)
 }
+
+func (m *MockNewsletterService) UpdateNewsletter(ctx context.Context, newsletterID string, editorID string, name *string, description *string) (*repository.Newsletter, error) {
+	args := m.Called(ctx, newsletterID, editorID, name, description)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*repository.Newsletter), args.Error(1)
+}
+
+func (m *MockNewsletterService) DeleteNewsletter(ctx context.Context, newsletterID string, editorID string) error {
+	args := m.Called(ctx, newsletterID, editorID)
+	return args.Error(0)
+}
+
+func (m *MockNewsletterService) GetNewsletterByID(ctx context.Context, newsletterID string) (*repository.Newsletter, error) {
+	args := m.Called(ctx, newsletterID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*repository.Newsletter), args.Error(1)
+}
+
+// Post methods required by NewsletterServiceInterface
+func (m *MockNewsletterService) CreatePost(ctx context.Context, editorFirebaseUID string, newsletterID uuid.UUID, title string, content string) (*models.Post, error) {
+	args := m.Called(ctx, editorFirebaseUID, newsletterID, title, content)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Post), args.Error(1)
+}
+
+func (m *MockNewsletterService) GetPostByID(ctx context.Context, postID uuid.UUID) (*models.Post, error) {
+	args := m.Called(ctx, postID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Post), args.Error(1)
+}
+
 func (m *MockNewsletterService) UpdatePost(ctx context.Context, editorFirebaseUID string, postID uuid.UUID, title *string, content *string) (*models.Post, error) {
-	panic("UpdatePost should not be called in publishing tests")
+	args := m.Called(ctx, editorFirebaseUID, postID, title, content)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Post), args.Error(1)
 }
+
 func (m *MockNewsletterService) DeletePost(ctx context.Context, editorFirebaseUID string, postID uuid.UUID) error {
 	args := m.Called(ctx, editorFirebaseUID, postID)
 	return args.Error(0)
 }
+
 func (m *MockNewsletterService) ListPostsByNewsletter(ctx context.Context, newsletterID uuid.UUID, limit int, offset int) ([]*models.Post, int, error) {
 	args := m.Called(ctx, newsletterID, limit, offset)
 	if args.Get(0) == nil {
@@ -69,16 +118,26 @@ func (m *MockSubscriberService) GetActiveSubscribersForNewsletter(ctx context.Co
 
 // Add other methods from SubscriberServiceInterface to satisfy the interface
 func (m *MockSubscriberService) SubscribeToNewsletter(ctx context.Context, req SubscribeToNewsletterRequest) (*SubscribeToNewsletterResponse, error) {
-	panic("SubscribeToNewsletter should not be called in publishing tests")
+	args := m.Called(ctx, req)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*SubscribeToNewsletterResponse), args.Error(1)
 }
+
 func (m *MockSubscriberService) ConfirmSubscription(ctx context.Context, req ConfirmSubscriptionRequest) error {
-	panic("ConfirmSubscription should not be called in publishing tests")
+	args := m.Called(ctx, req)
+	return args.Error(0)
 }
+
 func (m *MockSubscriberService) UnsubscribeByToken(ctx context.Context, token string) error {
-	panic("UnsubscribeByToken should not be called in publishing tests")
+	args := m.Called(ctx, token)
+	return args.Error(0)
 }
+
 func (m *MockSubscriberService) UnsubscribeFromNewsletter(ctx context.Context, req UnsubscribeFromNewsletterRequest) error {
-	panic("UnsubscribeFromNewsletter should not be called in publishing tests")
+	args := m.Called(ctx, req)
+	return args.Error(0)
 }
 
 type MockEmailService struct {
