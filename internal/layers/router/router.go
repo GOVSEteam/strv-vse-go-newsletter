@@ -14,6 +14,10 @@ import (
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/pkg/email" // Added email package
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/setup"
+	
+	// Swagger imports
+	_ "github.com/GOVSEteam/strv-vse-go-newsletter/docs" // Import docs for swagger
+	"github.com/swaggo/http-swagger"
 )
 
 func Router() http.Handler {
@@ -60,6 +64,20 @@ func Router() http.Handler {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))
+	})
+
+	// Swagger documentation endpoints
+	mux.HandleFunc("/swagger/", httpSwagger.Handler(
+		httpSwagger.URL("http://localhost:8080/docs/openapi.yaml"),
+	))
+	mux.HandleFunc("/docs/", httpSwagger.Handler(
+		httpSwagger.URL("http://localhost:8080/docs/openapi.yaml"),
+	))
+	
+	// Serve the OpenAPI spec file
+	mux.HandleFunc("/docs/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-yaml")
+		http.ServeFile(w, r, "docs/openapi.yaml")
 	})
 
 	// Editor routes - assuming these are still correct
