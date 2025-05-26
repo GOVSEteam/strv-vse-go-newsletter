@@ -1,0 +1,575 @@
+{
+	"info": {
+		"_postman_id": "newsletter-api-collection",
+		"name": "Newsletter API - Complete Showcase",
+		"description": "Complete API collection for the Go Newsletter application deployed on Railway. This collection demonstrates all available endpoints including authentication, newsletter management, post management, and subscription features.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "https://strv-vse-go-newsletter-production.up.railway.app",
+			"type": "string"
+		},
+		{
+			"key": "authToken",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "editorId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "newsletterId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "postId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "unsubscribeToken",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{authToken}}",
+				"type": "string"
+			}
+		]
+	},
+	"item": [
+		{
+			"name": "🔐 Authentication",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/healthz",
+							"host": ["{{baseUrl}}"],
+							"path": ["healthz"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Editor Sign Up",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    pm.collectionVariables.set('editorId', response.editor_id);",
+									"    console.log('Editor ID saved:', response.editor_id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"demo@example.com\",\n    \"password\": \"SecurePassword123!\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/editor/signup",
+							"host": ["{{baseUrl}}"],
+							"path": ["editor", "signup"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Editor Sign In",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    pm.collectionVariables.set('authToken', response.idToken);",
+									"    console.log('Auth token saved');",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"demo@example.com\",\n    \"password\": \"SecurePassword123!\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/editor/signin",
+							"host": ["{{baseUrl}}"],
+							"path": ["editor", "signin"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Password Reset Request",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"demo@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/editor/password-reset-request",
+							"host": ["{{baseUrl}}"],
+							"path": ["editor", "password-reset-request"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "📰 Newsletter Management",
+			"item": [
+				{
+					"name": "Create Newsletter",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    pm.collectionVariables.set('newsletterId', response.id);",
+									"    console.log('Newsletter ID saved:', response.id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{authToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Tech Weekly Digest\",\n    \"description\": \"A weekly newsletter covering the latest in technology, programming, and software development.\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/newsletters",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "newsletters"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List My Newsletters",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{authToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/newsletters?limit=10&offset=0",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "newsletters"],
+							"query": [
+								{
+									"key": "limit",
+									"value": "10"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Newsletter",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{authToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Tech Weekly Digest - Updated\",\n    \"description\": \"An updated weekly newsletter covering the latest in technology, programming, software development, and AI innovations.\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/newsletters/{{newsletterId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "newsletters", "{{newsletterId}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Newsletter",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{authToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/newsletters/{{newsletterId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "newsletters", "{{newsletterId}}"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "📝 Post Management",
+			"item": [
+				{
+					"name": "Create Post",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    pm.collectionVariables.set('postId', response.id);",
+									"    console.log('Post ID saved:', response.id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{authToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Introduction to Go Programming\",\n    \"content\": \"Go, also known as Golang, is a programming language developed by Google. It's designed for simplicity, efficiency, and reliability. In this post, we'll explore the basics of Go programming and why it's becoming increasingly popular for backend development.\\n\\n## Key Features of Go\\n\\n1. **Simplicity**: Go has a clean and simple syntax\\n2. **Concurrency**: Built-in support for concurrent programming\\n3. **Performance**: Compiled language with excellent performance\\n4. **Standard Library**: Rich standard library for common tasks\\n\\n## Getting Started\\n\\nTo start with Go, you'll need to install the Go compiler and set up your development environment...\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/newsletters/{{newsletterId}}/posts",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "newsletters", "{{newsletterId}}", "posts"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List Posts for Newsletter",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{authToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/newsletters/{{newsletterId}}/posts?limit=10&offset=0",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "newsletters", "{{newsletterId}}", "posts"],
+							"query": [
+								{
+									"key": "limit",
+									"value": "10"
+								},
+								{
+									"key": "offset",
+									"value": "0"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Post by ID",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{authToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/posts/{{postId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "posts", "{{postId}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Post",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{authToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Advanced Go Programming Techniques\",\n    \"content\": \"Go, also known as Golang, is a programming language developed by Google. It's designed for simplicity, efficiency, and reliability. In this updated post, we'll explore advanced Go programming techniques and best practices.\\n\\n## Advanced Features of Go\\n\\n1. **Goroutines**: Lightweight threads for concurrent programming\\n2. **Channels**: Communication between goroutines\\n3. **Interfaces**: Powerful type system for abstraction\\n4. **Reflection**: Runtime type inspection\\n\\n## Best Practices\\n\\n- Use goroutines for concurrent operations\\n- Implement proper error handling\\n- Follow Go naming conventions\\n- Write comprehensive tests\\n\\n## Conclusion\\n\\nGo continues to be an excellent choice for modern backend development, offering both simplicity and power.\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/posts/{{postId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "posts", "{{postId}}"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Publish Post",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{authToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/posts/{{postId}}/publish",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "posts", "{{postId}}", "publish"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Post",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{authToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/posts/{{postId}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "posts", "{{postId}}"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "👥 Subscription Management",
+			"item": [
+				{
+					"name": "Subscribe to Newsletter",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    console.log('Successfully subscribed to newsletter');",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"subscriber@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/newsletters/{{newsletterId}}/subscribe",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "newsletters", "{{newsletterId}}", "subscribe"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Newsletter Subscribers",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{authToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/newsletters/{{newsletterId}}/subscribers",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "newsletters", "{{newsletterId}}", "subscribers"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Unsubscribe by Token",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/subscriptions/unsubscribe?token={{unsubscribeToken}}",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "subscriptions", "unsubscribe"],
+							"query": [
+								{
+									"key": "token",
+									"value": "{{unsubscribeToken}}",
+									"description": "Unsubscribe token received via email"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	]
+} 
