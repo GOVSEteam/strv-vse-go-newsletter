@@ -2,10 +2,9 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "go run cmd/server/main.go"
 healthcheckPath = "/healthz"
 restartPolicyType = "on_failure"
 
 [[deploy.environmentVariables]]
 name = "PORT"
-value = "8080" 
+value = "8080"
