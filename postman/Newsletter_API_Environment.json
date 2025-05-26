@@ -1,0 +1,61 @@
+{
+	"id": "newsletter-api-environment",
+	"name": "Newsletter API - Production",
+	"values": [
+		{
+			"key": "baseUrl",
+			"value": "https://strv-vse-go-newsletter-production.up.railway.app",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "authToken",
+			"value": "",
+			"type": "secret",
+			"enabled": true
+		},
+		{
+			"key": "editorId",
+			"value": "",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "newsletterId",
+			"value": "",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "postId",
+			"value": "",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "unsubscribeToken",
+			"value": "",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "testEmail",
+			"value": "demo@example.com",
+			"type": "default",
+			"enabled": true
+		},
+		{
+			"key": "testPassword",
+			"value": "SecurePassword123!",
+			"type": "secret",
+			"enabled": true
+		},
+		{
+			"key": "subscriberEmail",
+			"value": "subscriber@example.com",
+			"type": "default",
+			"enabled": true
+		}
+	],
+	"_postman_variable_scope": "environment"
+} 
