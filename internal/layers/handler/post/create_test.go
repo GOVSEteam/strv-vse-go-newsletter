@@ -241,40 +241,52 @@ func TestCreatePostHandler(t *testing.T) {
 		assert.Contains(t, rr.Body.String(), "Invalid request body")
 	})
 
-	t.Run("Error - Empty Title", func(t *testing.T) {
+	t.Run("Error - Empty Title (from Service)", func(t *testing.T) {
 		auth.VerifyFirebaseJWT = func(r *http.Request) (string, error) {
 			return editorFirebaseUID, nil
 		}
 
 		postData := h.CreatePostRequest{
-			Title:   "",
+			Title:   "", // Empty title sent to service
 			Content: "Valid content",
 		}
+
+		// Expect service to be called and return ErrPostTitleEmpty
+		mockService.On("CreatePost", mock.Anything, editorFirebaseUID, newsletterID, postData.Title, postData.Content).
+			Return(nil, service.ErrPostTitleEmpty).Once()
+
 		bodyBytes, _ := json.Marshal(postData)
 		req := httptest.NewRequest(http.MethodPost, "/api/newsletters/"+newsletterID.String()+"/posts", bytes.NewReader(bodyBytes))
 		req.SetPathValue("newsletterID", newsletterID.String())
 		rr := httptest.NewRecorder()
 		httpHandler.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusBadRequest, rr.Code)
-		assert.Contains(t, rr.Body.String(), "Post title cannot be empty")
+		assert.Contains(t, rr.Body.String(), service.ErrPostTitleEmpty.Error())
+		mockService.AssertExpectations(t) // Ensure service was called
 	})
 
-	t.Run("Error - Empty Content", func(t *testing.T) {
+	t.Run("Error - Empty Content (from Service)", func(t *testing.T) {
 		auth.VerifyFirebaseJWT = func(r *http.Request) (string, error) {
 			return editorFirebaseUID, nil
 		}
 
 		postData := h.CreatePostRequest{
 			Title:   "Valid title",
-			Content: "",
+			Content: "", // Empty content sent to service
 		}
+
+		// Expect service to be called and return ErrPostContentEmpty
+		mockService.On("CreatePost", mock.Anything, editorFirebaseUID, newsletterID, postData.Title, postData.Content).
+			Return(nil, service.ErrPostContentEmpty).Once()
+
 		bodyBytes, _ := json.Marshal(postData)
 		req := httptest.NewRequest(http.MethodPost, "/api/newsletters/"+newsletterID.String()+"/posts", bytes.NewReader(bodyBytes))
 		req.SetPathValue("newsletterID", newsletterID.String())
 		rr := httptest.NewRecorder()
 		httpHandler.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusBadRequest, rr.Code)
-		assert.Contains(t, rr.Body.String(), "Post content cannot be empty")
+		assert.Contains(t, rr.Body.String(), service.ErrPostContentEmpty.Error())
+		mockService.AssertExpectations(t) // Ensure service was called
 	})
 
 	t.Run("Error - Service ErrForbidden", func(t *testing.T) {

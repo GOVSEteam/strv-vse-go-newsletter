@@ -50,14 +50,15 @@ func CreatePostHandler(svc service.NewsletterServiceInterface, editorRepo reposi
 			return
 		}
 
-		if req.Title == "" {
-			globalHandler.JSONError(w, "Post title cannot be empty", http.StatusBadRequest)
-			return
-		}
-		if req.Content == "" {
-			globalHandler.JSONError(w, "Post content cannot be empty", http.StatusBadRequest)
-			return
-		}
+		// Title and Content validation removed from handler, will be done by service
+		// if req.Title == "" {
+		// 	globalHandler.JSONError(w, "Post title cannot be empty", http.StatusBadRequest)
+		// 	return
+		// }
+		// if req.Content == "" {
+		// 	globalHandler.JSONError(w, "Post content cannot be empty", http.StatusBadRequest)
+		// 	return
+		// }
 
 		post, err := svc.CreatePost(r.Context(), editorFirebaseUID, newsletterID, req.Title, req.Content)
 		if err != nil {
@@ -65,6 +66,8 @@ func CreatePostHandler(svc service.NewsletterServiceInterface, editorRepo reposi
 				globalHandler.JSONError(w, "Forbidden: You do not own this newsletter or editor not found.", http.StatusForbidden)
 			} else if errors.Is(err, service.ErrServiceNewsletterNotFound) { // Using the renamed error
 				globalHandler.JSONError(w, "Newsletter not found.", http.StatusNotFound)
+			} else if errors.Is(err, service.ErrPostTitleEmpty) || errors.Is(err, service.ErrPostContentEmpty) {
+				globalHandler.JSONError(w, err.Error(), http.StatusBadRequest)
 			} else {
 				globalHandler.JSONError(w, "Failed to create post: "+err.Error(), http.StatusInternalServerError)
 			}
