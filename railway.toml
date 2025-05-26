@@ -1,7 +1,9 @@
 [build]
 builder = "nixpacks"
+buildCommand = "go build -o main cmd/server/main.go"
 
 [deploy]
+startCommand = "./main"
 healthcheckPath = "/healthz"
 restartPolicyType = "on_failure"
 
