@@ -67,8 +67,18 @@ func Router() http.Handler {
 	})
 
 	// Swagger documentation endpoints
-	mux.HandleFunc("/swagger/", httpSwagger.WrapHandler)
-	mux.HandleFunc("/docs/", httpSwagger.WrapHandler)
+	mux.HandleFunc("/swagger/", httpSwagger.Handler(
+		httpSwagger.URL("http://localhost:8080/docs/openapi.yaml"),
+	))
+	mux.HandleFunc("/docs/", httpSwagger.Handler(
+		httpSwagger.URL("http://localhost:8080/docs/openapi.yaml"),
+	))
+	
+	// Serve the OpenAPI spec file
+	mux.HandleFunc("/docs/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-yaml")
+		http.ServeFile(w, r, "docs/openapi.yaml")
+	})
 
 	// Editor routes - assuming these are still correct
 	mux.HandleFunc("/editor/signup", editor.EditorSignUpHandler(editorService))
