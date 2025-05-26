@@ -1,0 +1,822 @@
+openapi: 3.0.3
+info:
+  title: Newsletter API
+  description: A comprehensive API for managing newsletters, posts, and subscribers
+  version: 1.0.0
+  contact:
+    name: Newsletter API Support
+    email: support@newsletter-api.com
+
+servers:
+  - url: https://strv-vse-go-newsletter-production.up.railway.app
+    description: Production server
+  - url: http://localhost:8080
+    description: Local development server
+
+paths:
+  /healthz:
+    get:
+      summary: Health check endpoint
+      description: Returns the health status of the API
+      tags:
+        - Health
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "ok"
+
+  # Editor Authentication Endpoints
+  /editor/signup:
+    post:
+      summary: Register a new editor
+      description: Create a new editor account with email and password
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditorSignUpRequest'
+      responses:
+        '201':
+          description: Editor created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Editor'
+        '400':
+          description: Invalid request data
+        '409':
+          description: Email already exists
+
+  /editor/signin:
+    post:
+      summary: Sign in an editor
+      description: Authenticate an editor and return access tokens
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EditorSignInRequest'
+      responses:
+        '200':
+          description: Sign in successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignInResponse'
+        '401':
+          description: Invalid credentials
+        '400':
+          description: Invalid request data
+
+  /editor/password-reset-request:
+    post:
+      summary: Request password reset
+      description: Send a password reset email to the editor
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: "editor@example.com"
+              required:
+                - email
+      responses:
+        '200':
+          description: Password reset email sent
+        '404':
+          description: Email not found
+
+  # Newsletter Endpoints
+  /api/newsletters:
+    get:
+      summary: List newsletters
+      description: Get a paginated list of newsletters for the authenticated editor
+      tags:
+        - Newsletters
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          description: Number of newsletters to return
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          description: Number of newsletters to skip
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: List of newsletters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NewsletterListResponse'
+        '401':
+          description: Unauthorized
+
+    post:
+      summary: Create a newsletter
+      description: Create a new newsletter for the authenticated editor
+      tags:
+        - Newsletters
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNewsletterRequest'
+      responses:
+        '201':
+          description: Newsletter created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Newsletter'
+        '400':
+          description: Invalid request data
+        '401':
+          description: Unauthorized
+        '409':
+          description: Newsletter name already exists for this editor
+
+  /api/newsletters/{id}:
+    patch:
+      summary: Update a newsletter
+      description: Update an existing newsletter owned by the authenticated editor
+      tags:
+        - Newsletters
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Newsletter ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateNewsletterRequest'
+      responses:
+        '200':
+          description: Newsletter updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Newsletter'
+        '400':
+          description: Invalid request data
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - not the owner
+        '404':
+          description: Newsletter not found
+
+    delete:
+      summary: Delete a newsletter
+      description: Delete an existing newsletter owned by the authenticated editor
+      tags:
+        - Newsletters
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Newsletter ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Newsletter deleted successfully
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - not the owner
+        '404':
+          description: Newsletter not found
+
+  # Post Endpoints
+  /api/newsletters/{newsletterID}/posts:
+    get:
+      summary: List posts for a newsletter
+      description: Get a paginated list of posts for a specific newsletter
+      tags:
+        - Posts
+      parameters:
+        - name: newsletterID
+          in: path
+          required: true
+          description: Newsletter ID
+          schema:
+            type: string
+            format: uuid
+        - name: limit
+          in: query
+          description: Number of posts to return
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          description: Number of posts to skip
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: List of posts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostListResponse'
+        '404':
+          description: Newsletter not found
+
+    post:
+      summary: Create a post
+      description: Create a new post for a newsletter owned by the authenticated editor
+      tags:
+        - Posts
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: newsletterID
+          in: path
+          required: true
+          description: Newsletter ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePostRequest'
+      responses:
+        '201':
+          description: Post created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Post'
+        '400':
+          description: Invalid request data
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - not the newsletter owner
+        '404':
+          description: Newsletter not found
+
+  /api/posts/{postID}:
+    get:
+      summary: Get a post by ID
+      description: Retrieve a specific post by its ID
+      tags:
+        - Posts
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: postID
+          in: path
+          required: true
+          description: Post ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Post details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Post'
+        '401':
+          description: Unauthorized
+        '404':
+          description: Post not found
+
+    put:
+      summary: Update a post
+      description: Update an existing post owned by the authenticated editor
+      tags:
+        - Posts
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: postID
+          in: path
+          required: true
+          description: Post ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePostRequest'
+      responses:
+        '200':
+          description: Post updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Post'
+        '400':
+          description: Invalid request data
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - not the owner
+        '404':
+          description: Post not found
+
+    delete:
+      summary: Delete a post
+      description: Delete an existing post owned by the authenticated editor
+      tags:
+        - Posts
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: postID
+          in: path
+          required: true
+          description: Post ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Post deleted successfully
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - not the owner
+        '404':
+          description: Post not found
+
+  /api/posts/{postID}/publish:
+    post:
+      summary: Publish a post
+      description: Publish a post to all active subscribers of the newsletter
+      tags:
+        - Posts
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: postID
+          in: path
+          required: true
+          description: Post ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Post published successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Post published successfully"
+                  published_at:
+                    type: string
+                    format: date-time
+        '400':
+          description: Post already published or invalid state
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - not the owner
+        '404':
+          description: Post not found
+
+  # Subscriber Endpoints
+  /api/newsletters/{newsletterID}/subscribe:
+    post:
+      summary: Subscribe to a newsletter
+      description: Subscribe an email address to a newsletter
+      tags:
+        - Subscribers
+      parameters:
+        - name: newsletterID
+          in: path
+          required: true
+          description: Newsletter ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubscribeRequest'
+      responses:
+        '201':
+          description: Subscription created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscribeResponse'
+        '400':
+          description: Invalid request data
+        '404':
+          description: Newsletter not found
+        '409':
+          description: Email already subscribed to this newsletter
+
+  /api/newsletters/{newsletterID}/subscribers:
+    get:
+      summary: Get newsletter subscribers
+      description: Get a list of active subscribers for a newsletter (editor only)
+      tags:
+        - Subscribers
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: newsletterID
+          in: path
+          required: true
+          description: Newsletter ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: List of subscribers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriberListResponse'
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden - not the newsletter owner
+        '404':
+          description: Newsletter not found
+
+  /api/subscriptions/unsubscribe:
+    get:
+      summary: Unsubscribe from newsletter
+      description: Unsubscribe from a newsletter using a token (one-click unsubscribe)
+      tags:
+        - Subscribers
+      parameters:
+        - name: token
+          in: query
+          required: true
+          description: Unsubscribe token
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Successfully unsubscribed
+          content:
+            text/html:
+              schema:
+                type: string
+                example: "<html><body><h1>Successfully unsubscribed</h1></body></html>"
+        '400':
+          description: Invalid or expired token
+        '404':
+          description: Subscription not found
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Firebase JWT token
+
+  schemas:
+    # Authentication Schemas
+    EditorSignUpRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: "editor@example.com"
+        password:
+          type: string
+          minLength: 6
+          example: "password123"
+
+    EditorSignInRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: "editor@example.com"
+        password:
+          type: string
+          example: "password123"
+
+    SignInResponse:
+      type: object
+      properties:
+        idToken:
+          type: string
+          description: Firebase ID token
+        refreshToken:
+          type: string
+          description: Firebase refresh token
+        email:
+          type: string
+          format: email
+        localId:
+          type: string
+          description: Firebase user ID
+
+    Editor:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        firebase_uid:
+          type: string
+          example: "firebase-uid-123"
+        email:
+          type: string
+          format: email
+          example: "editor@example.com"
+
+    # Newsletter Schemas
+    Newsletter:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        editor_id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        name:
+          type: string
+          example: "Tech Weekly"
+        description:
+          type: string
+          example: "Weekly newsletter about technology trends"
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+
+    CreateNewsletterRequest:
+      type: object
+      required:
+        - name
+        - description
+      properties:
+        name:
+          type: string
+          example: "Tech Weekly"
+        description:
+          type: string
+          example: "Weekly newsletter about technology trends"
+
+    UpdateNewsletterRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "Tech Weekly Updated"
+        description:
+          type: string
+          example: "Updated description for the newsletter"
+
+    NewsletterListResponse:
+      type: object
+      properties:
+        newsletters:
+          type: array
+          items:
+            $ref: '#/components/schemas/Newsletter'
+        total:
+          type: integer
+          example: 25
+        limit:
+          type: integer
+          example: 10
+        offset:
+          type: integer
+          example: 0
+
+    # Post Schemas
+    Post:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        newsletter_id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        title:
+          type: string
+          example: "Introduction to Go Programming"
+        content:
+          type: string
+          example: "This is the content of the post..."
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2024-01-15T10:30:00Z"
+        created_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+
+    CreatePostRequest:
+      type: object
+      required:
+        - title
+        - content
+      properties:
+        title:
+          type: string
+          example: "Introduction to Go Programming"
+        content:
+          type: string
+          example: "This is the content of the post..."
+
+    UpdatePostRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          example: "Updated: Introduction to Go Programming"
+        content:
+          type: string
+          example: "This is the updated content of the post..."
+
+    PostListResponse:
+      type: object
+      properties:
+        posts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Post'
+        total:
+          type: integer
+          example: 15
+        limit:
+          type: integer
+          example: 10
+        offset:
+          type: integer
+          example: 0
+
+    # Subscriber Schemas
+    Subscriber:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "subscriber-doc-id"
+        email:
+          type: string
+          format: email
+          example: "subscriber@example.com"
+        newsletter_id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        subscription_date:
+          type: string
+          format: date-time
+          example: "2024-01-15T10:30:00Z"
+        status:
+          type: string
+          enum: [active, unsubscribed]
+          example: "active"
+
+    SubscribeRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          example: "subscriber@example.com"
+
+    SubscribeResponse:
+      type: object
+      properties:
+        subscriber_id:
+          type: string
+          example: "subscriber-doc-id"
+        email:
+          type: string
+          format: email
+          example: "subscriber@example.com"
+        newsletter_id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        status:
+          type: string
+          enum: [active, unsubscribed]
+          example: "active"
+
+    SubscriberListResponse:
+      type: object
+      properties:
+        subscribers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Subscriber'
+        total:
+          type: integer
+          example: 150
+
+    # Error Schemas
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Invalid request data"
+        message:
+          type: string
+          example: "The provided email address is not valid"
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Authentication
+    description: Editor authentication and account management
+  - name: Newsletters
+    description: Newsletter management operations
+  - name: Posts
+    description: Post management and publishing operations
+  - name: Subscribers
+    description: Subscription management operations 
