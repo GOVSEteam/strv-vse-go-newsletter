@@ -1,6 +1,6 @@
 [build]
 builder = "nixpacks"
-buildCommand = "go build -o main cmd/server/main.go"
+buildCommand = "go build -o main cmd/server/main.go && go build -o migrate cmd/migrate/main.go"
 
 [deploy]
 startCommand = "./main"
