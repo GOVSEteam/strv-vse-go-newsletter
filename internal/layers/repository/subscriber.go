@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"time"
 
 	"cloud.google.com/go/firestore"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models" // Assuming this path is correct
@@ -18,11 +17,9 @@ type SubscriberRepository interface {
 	CreateSubscriber(ctx context.Context, subscriber models.Subscriber) (string, error)
 	GetSubscriberByEmailAndNewsletterID(ctx context.Context, email string, newsletterID string) (*models.Subscriber, error)
 	UpdateSubscriberStatus(ctx context.Context, subscriberID string, status models.SubscriberStatus) error
-	GetSubscriberByConfirmationToken(ctx context.Context, token string) (*models.Subscriber, error)
-	ConfirmSubscriber(ctx context.Context, subscriberID string, confirmationTime time.Time) error
-	GetSubscriberByUnsubscribeToken(ctx context.Context, token string) (*models.Subscriber, error)                 // New method
+	UpdateSubscriberUnsubscribeToken(ctx context.Context, subscriberID string, newToken string) error
+	GetSubscriberByUnsubscribeToken(ctx context.Context, token string) (*models.Subscriber, error)            // New method
 	GetActiveSubscribersByNewsletterID(ctx context.Context, newsletterID string) ([]models.Subscriber, error) // New method
-	// TODO: Add IsSubscribed(ctx context.Context, email, newsletterID string) (bool, error)
 }
 
 // firestoreSubscriberRepository implements SubscriberRepository using Firestore.
@@ -93,11 +90,6 @@ func (r *firestoreSubscriberRepository) UpdateSubscriberStatus(ctx context.Conte
 			Path:  "status",
 			Value: newStatus,
 		},
-		// We could also update an 'unsubscribed_at' timestamp here if needed.
-		// {
-		// 	Path: "unsubscribed_at",
-		// 	Value: time.Now().UTC(),
-		// },
 	})
 
 	if err != nil {
@@ -105,6 +97,24 @@ func (r *firestoreSubscriberRepository) UpdateSubscriberStatus(ctx context.Conte
 			return status.Errorf(codes.NotFound, "subscriber with ID %s not found for update", subscriberID)
 		}
 		return status.Errorf(codes.Internal, "failed to update subscriber status in Firestore: %v", err)
+	}
+	return nil
+}
+
+func (r *firestoreSubscriberRepository) UpdateSubscriberUnsubscribeToken(ctx context.Context, subscriberID string, newToken string) error {
+	docRef := r.client.Collection(subscribersCollection).Doc(subscriberID)
+
+	_, err := docRef.Update(ctx, []firestore.Update{
+		{
+			Path:  "unsubscribe_token",
+			Value: newToken,
+		},
+	})
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return status.Errorf(codes.NotFound, "subscriber with ID %s not found for update", subscriberID)
+		}
+		return status.Errorf(codes.Internal, "failed to update unsubscribe token in Firestore: %v", err)
 	}
 	return nil
 }
@@ -165,50 +175,4 @@ func (r *firestoreSubscriberRepository) GetActiveSubscribersByNewsletterID(ctx c
 	}
 
 	return subscribers, nil
-}
-
-// GetSubscriberByConfirmationToken retrieves a subscriber by their confirmation token.
-// Returns (nil, nil) if not found.
-func (r *firestoreSubscriberRepository) GetSubscriberByConfirmationToken(ctx context.Context, token string) (*models.Subscriber, error) {
-	iter := r.client.Collection(subscribersCollection).
-		Where("confirmation_token", "==", token).
-		Limit(1).
-		Documents(ctx)
-
-	defer iter.Stop()
-
-	doc, err := iter.Next()
-	if err == iterator.Done {
-		return nil, nil // Not found
-	}
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to query Firestore for subscriber by token: %v", err)
-	}
-
-	var subscriber models.Subscriber
-	if err := doc.DataTo(&subscriber); err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to decode subscriber data by token: %v", err)
-	}
-	subscriber.ID = doc.Ref.ID
-	return &subscriber, nil
-}
-
-// ConfirmSubscriber updates the subscriber's status to active, clears the token fields, and sets the confirmation time.
-func (r *firestoreSubscriberRepository) ConfirmSubscriber(ctx context.Context, subscriberID string, confirmationTime time.Time) error {
-	docRef := r.client.Collection(subscribersCollection).Doc(subscriberID)
-
-	_, err := docRef.Update(ctx, []firestore.Update{
-		{Path: "status", Value: models.SubscriberStatusActive},
-		{Path: "confirmation_token", Value: firestore.Delete},
-		{Path: "token_expiry_time", Value: firestore.Delete},
-		{Path: "confirmed_at", Value: confirmationTime},
-	})
-
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return status.Errorf(codes.NotFound, "subscriber with ID %s not found for confirmation update", subscriberID)
-		}
-		return status.Errorf(codes.Internal, "failed to confirm subscriber in Firestore: %v", err)
-	}
-	return nil
 }
