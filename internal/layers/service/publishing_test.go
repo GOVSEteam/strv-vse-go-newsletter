@@ -31,28 +31,12 @@ func (m *MockNewsletterService) MarkPostAsPublished(ctx context.Context, editorF
 	return args.Error(0)
 }
 
-// Add other methods from NewsletterServiceInterface to satisfy the interface
-func (m *MockNewsletterService) CreateNewsletter(ctx context.Context, editorID, name, description string) (*repository.Newsletter, error) {
-	panic("CreateNewsletter should not be called in publishing tests")
+// Default behavior for unexpected calls
+func (m *MockNewsletterService) DefaultMockBehavior(methodName string, args ...interface{}) {
+	m.T.Fatalf("Unexpected call to %s with args: %v", methodName, args)
 }
-func (m *MockNewsletterService) GetNewsletterByID(ctx context.Context, newsletterID string) (*repository.Newsletter, error) {
-	panic("GetNewsletterByID should not be called in publishing tests")
-}
-func (m *MockNewsletterService) ListNewslettersByEditorID(ctx context.Context, editorID string, limit int, offset int) ([]repository.Newsletter, int, error) {
-	panic("ListNewslettersByEditorID should not be called in publishing tests")
-}
-func (m *MockNewsletterService) UpdateNewsletter(ctx context.Context, newsletterID string, editorID string, name *string, description *string) (*repository.Newsletter, error) {
-	panic("UpdateNewsletter should not be called in publishing tests")
-}
-func (m *MockNewsletterService) DeleteNewsletter(ctx context.Context, newsletterID string, editorID string) error {
-	panic("DeleteNewsletter should not be called in publishing tests")
-}
-func (m *MockNewsletterService) CreatePost(ctx context.Context, editorFirebaseUID string, newsletterID uuid.UUID, title string, content string) (*models.Post, error) {
-	panic("CreatePost should not be called in publishing tests")
-}
-func (m *MockNewsletterService) GetPostByID(ctx context.Context, postID uuid.UUID) (*models.Post, error) {
-	panic("GetPostByID should not be called in publishing tests")
-}
+
+// Remove panic-based stubs; rely on default behavior for unexpected calls
 func (m *MockNewsletterService) GetPostsByNewsletterID(ctx context.Context, editorFirebaseUID string, newsletterID uuid.UUID, limit, offset int, statusFilter string) ([]models.Post, int, error) {
 	panic("GetPostsByNewsletterID should not be called in publishing tests")
 }
