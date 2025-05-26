@@ -1,0 +1,10 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+healthcheckPath = "/healthz"
+restartPolicyType = "on_failure"
+
+[[deploy.environmentVariables]]
+name = "PORT"
+value = "8080"
