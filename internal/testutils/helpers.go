@@ -39,9 +39,11 @@ func CreateTestSubscriber(newsletterID string, suffix int) *models.Subscriber {
 	timestamp := time.Now().Unix()
 	now := time.Now()
 	return &models.Subscriber{
-		Email:        fmt.Sprintf("test_subscriber_%d_%d@example.com", suffix, timestamp),
-		NewsletterID: newsletterID,
-		ConfirmedAt:  &now,
+		Email:            fmt.Sprintf("test_subscriber_%d_%d@example.com", suffix, timestamp),
+		NewsletterID:     newsletterID,
+		SubscriptionDate: now,
+		Status:           models.SubscriberStatusActive,
+		UnsubscribeToken: fmt.Sprintf("test_token_%d_%d", suffix, timestamp),
 	}
 }
 

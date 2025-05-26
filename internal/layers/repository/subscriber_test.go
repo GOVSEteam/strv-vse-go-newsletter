@@ -3,7 +3,6 @@ package repository_test
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models"
@@ -38,7 +37,7 @@ func TestCreateSubscriber_Success(t *testing.T) {
 		// ID will be set by Firestore or repo
 		Email:             "test.subscriber." + uuid.New().String() + "@example.com",
 		NewsletterID:      newsletterID.String(),
-		Status:            models.SubscriberStatusPendingConfirmation,
+		Status:            models.SubscriberStatusActive,
 		ConfirmationToken: "confirm-" + uuid.New().String(),
 		// TokenExpiresAt:    time.Now().Add(24 * time.Hour), // Field does not exist
 		UnsubscribeToken:  "unsubscribe-" + uuid.New().String(),
@@ -76,7 +75,7 @@ func TestCreateSubscriber_DuplicateEmailAndNewsletter(t *testing.T) {
 	sub1 := models.Subscriber{
 		Email:        email,
 		NewsletterID: newsletterID.String(), // Corrected
-		Status:       models.SubscriberStatusPendingConfirmation,
+		Status:       models.SubscriberStatusActive,
 	}
 	_, err := subRepo.CreateSubscriber(ctx, sub1)
 	require.NoError(t, err)
@@ -84,7 +83,7 @@ func TestCreateSubscriber_DuplicateEmailAndNewsletter(t *testing.T) {
 	sub2 := models.Subscriber{
 		Email:        email, // Same email
 		NewsletterID: newsletterID.String(), // Corrected & Same newsletter ID
-		Status:       models.SubscriberStatusPendingConfirmation,
+		Status:       models.SubscriberStatusActive,
 	}
 	_, err = subRepo.CreateSubscriber(ctx, sub2)
 	assert.Error(t, err) // Expect an error due to duplicate (email, newsletterID) unique constraint
@@ -148,49 +147,46 @@ func TestUpdateSubscriberStatus_Success(t *testing.T) {
 	subscriber := models.Subscriber{
 		Email:        "update.status.sub." + uuid.New().String() + "@example.com",
 		NewsletterID: newsletterID.String(), // Corrected
-		Status:       models.SubscriberStatusPendingConfirmation,
+		Status:       models.SubscriberStatusActive,
 	}
 	createdID, err := subRepo.CreateSubscriber(ctx, subscriber)
 	require.NoError(t, err)
 
-	err = subRepo.UpdateSubscriberStatus(ctx, createdID, models.SubscriberStatusActive)
+	err = subRepo.UpdateSubscriberStatus(ctx, createdID, models.SubscriberStatusUnsubscribed)
 	require.NoError(t, err)
 
 	fetched, err := subRepo.GetSubscriberByEmailAndNewsletterID(ctx, subscriber.Email, subscriber.NewsletterID) // Fetch again to check
 	require.NoError(t, err)
 	require.NotNil(t, fetched)
-	assert.Equal(t, models.SubscriberStatusActive, fetched.Status)
+	assert.Equal(t, models.SubscriberStatusUnsubscribed, fetched.Status)
 }
 
-func TestConfirmSubscriber_Success(t *testing.T) {
+func TestUpdateSubscriberUnsubscribeToken_Success(t *testing.T) {
 	// firesuite := testutils.NewTestSuite(t) // Removed as unused
 	t.Skip("Skipping Firestore dependent test until emulator/DB setup is clarified for SubscriberRepository, and firesuite usage for DB client is resolved.")
 	ctx := context.Background()
 	subRepo := repository.NewFirestoreSubscriberRepository(nil) // Changed from firesuite.DB
 
-	confirmToken := "confirm-for-activate-" + uuid.New().String()
+	unsubscribeToken := "unsub-token-" + uuid.New().String()
 	subscriber := models.Subscriber{
-		Email:             "confirm.activate.sub." + uuid.New().String() + "@example.com",
-		NewsletterID:      uuid.New().String(), // Corrected
-		Status:            models.SubscriberStatusPendingConfirmation,
-		ConfirmationToken: confirmToken,
+		Email:            "update.token.sub." + uuid.New().String() + "@example.com",
+		NewsletterID:     uuid.New().String(), // Corrected
+		Status:           models.SubscriberStatusActive,
+		UnsubscribeToken: "old-token",
 	}
 	createdID, err := subRepo.CreateSubscriber(ctx, subscriber)
 	require.NoError(t, err)
 
-	confirmationTime := time.Now().UTC().Truncate(time.Second)
-	err = subRepo.ConfirmSubscriber(ctx, createdID, confirmationTime)
+	err = subRepo.UpdateSubscriberUnsubscribeToken(ctx, createdID, unsubscribeToken)
 	require.NoError(t, err)
 
 	fetched, _ := subRepo.GetSubscriberByEmailAndNewsletterID(ctx, subscriber.Email, subscriber.NewsletterID) // Fetch again
 	require.NotNil(t, fetched)
 	assert.Equal(t, models.SubscriberStatusActive, fetched.Status)
-	require.NotNil(t, fetched.ConfirmedAt)
-	assert.Equal(t, confirmationTime, fetched.ConfirmedAt.UTC().Truncate(time.Second))
-	assert.Empty(t, fetched.ConfirmationToken) // Should be cleared
+	assert.Equal(t, unsubscribeToken, fetched.UnsubscribeToken)
 }
 
-func TestGetSubscriberByConfirmationToken_Success(t *testing.T) {
+func TestGetSubscriberByUnsubscribeToken_Success_Detailed(t *testing.T) {
 	t.Skip("Skipping Firestore dependent test until emulator/DB setup is clarified for SubscriberRepository")
 	
 	// firesuite := testutils.NewTestSuite(t) // Removed as unused
@@ -198,23 +194,24 @@ func TestGetSubscriberByConfirmationToken_Success(t *testing.T) {
 	ctx := context.Background()
 	subRepo := repository.NewFirestoreSubscriberRepository(nil) // Changed from firesuite.DB
 
-	confirmToken := "get-by-confirm-token-" + uuid.New().String()
+	unsubscribeToken := "get-by-unsub-token-detailed-" + uuid.New().String()
 	subscriber := models.Subscriber{
-		Email:             "get.by.ctoken." + uuid.New().String() + "@example.com",
-		NewsletterID:      uuid.New().String(), // Corrected
-		ConfirmationToken: confirmToken,
+		Email:            "get.by.utoken.detailed." + uuid.New().String() + "@example.com",
+		NewsletterID:     uuid.New().String(), // Corrected
+		UnsubscribeToken: unsubscribeToken,
+		Status:           models.SubscriberStatusActive,
 	}
 	createdID, err := subRepo.CreateSubscriber(ctx, subscriber)
 	require.NoError(t, err)
 
-	fetched, err := subRepo.GetSubscriberByConfirmationToken(ctx, confirmToken)
+	fetched, err := subRepo.GetSubscriberByUnsubscribeToken(ctx, unsubscribeToken)
 	require.NoError(t, err)
 	require.NotNil(t, fetched)
 	assert.Equal(t, createdID, fetched.ID)
-	assert.Equal(t, confirmToken, fetched.ConfirmationToken)
+	assert.Equal(t, unsubscribeToken, fetched.UnsubscribeToken)
 }
 
-func TestGetSubscriberByConfirmationToken_NotFound(t *testing.T) {
+func TestGetSubscriberByUnsubscribeToken_NotFound_Detailed(t *testing.T) {
 	t.Skip("Skipping Firestore dependent test until emulator/DB setup is clarified for SubscriberRepository")
 	
 	// firesuite := testutils.NewTestSuite(t) // Removed as unused
@@ -222,8 +219,8 @@ func TestGetSubscriberByConfirmationToken_NotFound(t *testing.T) {
 	ctx := context.Background()
 	subRepo := repository.NewFirestoreSubscriberRepository(nil) // Changed from firesuite.DB
 
-	nonExistentToken := "no-such-confirm-token-" + uuid.New().String()
-	fetched, err := subRepo.GetSubscriberByConfirmationToken(ctx, nonExistentToken)
+	nonExistentToken := "no-such-unsub-token-detailed-" + uuid.New().String()
+	fetched, err := subRepo.GetSubscriberByUnsubscribeToken(ctx, nonExistentToken)
 	assert.Error(t, err)
 	assert.ErrorContains(t, err, "subscriber not found") // Changed from repository.ErrSubscriberNotFound
 	assert.Nil(t, fetched)
@@ -285,8 +282,8 @@ func TestGetActiveSubscribersByNewsletterID_Success(t *testing.T) {
 	// Another active subscriber for newsletter1
 	_, err = subRepo.CreateSubscriber(ctx, models.Subscriber{Email: "active2@nl1.com", NewsletterID: newsletter1ID.String(), Status: models.SubscriberStatusActive})
 	require.NoError(t, err)
-	// Pending subscriber for newsletter1 (should not be fetched)
-	_, err = subRepo.CreateSubscriber(ctx, models.Subscriber{Email: "pending1@nl1.com", NewsletterID: newsletter1ID.String(), Status: models.SubscriberStatusPendingConfirmation})
+	// Unsubscribed subscriber for newsletter1 (should not be fetched)
+	_, err = subRepo.CreateSubscriber(ctx, models.Subscriber{Email: "pending1@nl1.com", NewsletterID: newsletter1ID.String(), Status: models.SubscriberStatusUnsubscribed})
 	require.NoError(t, err)
 	// Unsubscribed subscriber for newsletter1 (should not be fetched)
 	_, err = subRepo.CreateSubscriber(ctx, models.Subscriber{Email: "unsub1@nl1.com", NewsletterID: newsletter1ID.String(), Status: models.SubscriberStatusUnsubscribed})
@@ -314,8 +311,8 @@ func TestGetActiveSubscribersByNewsletterID_NoActiveSubscribers(t *testing.T) {
 	subRepo := repository.NewFirestoreSubscriberRepository(nil) // Changed from firesuite.DB
 
 	newsletterID := uuid.New()
-	// Pending subscriber for newsletter (should not be fetched)
-	_, err := subRepo.CreateSubscriber(ctx, models.Subscriber{Email: "pending@nl.com", NewsletterID: newsletterID.String(), Status: models.SubscriberStatusPendingConfirmation})
+	// Unsubscribed subscriber for newsletter (should not be fetched)
+	_, err := subRepo.CreateSubscriber(ctx, models.Subscriber{Email: "pending@nl.com", NewsletterID: newsletterID.String(), Status: models.SubscriberStatusUnsubscribed})
 	require.NoError(t, err)
 
 	activeSubs, err := subRepo.GetActiveSubscribersByNewsletterID(ctx, newsletterID.String())

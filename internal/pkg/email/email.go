@@ -24,8 +24,8 @@ func (s *ConsoleEmailService) SendConfirmationEmail(toEmail, recipientName, conf
 	log.Printf("---- SENDING CONFIRMATION EMAIL (CONSOLE MOCK) ----")
 	log.Printf("To: %s", toEmail)
 	log.Printf("Recipient Name: %s (Note: name might not be available for subscriber, using email or generic greeting)", recipientName)
-	log.Printf("Subject: Confirm Your Subscription")
-	log.Printf("Body (template placeholder):\nHi %s,\n\nPlease confirm your subscription by clicking the link below:\n%s\n\nThanks!", recipientName, confirmationLink)
+	log.Printf("Subject:Your Newsletter Subscription Is Active")
+	log.Printf("Body (template placeholder):\nHi %s,\n\nYour subscription to our newsletter is now active!\n\nThanks!\n\nIf you didn't sign up for this or have changed your mind, you can unsubscribe at any time by clicking the link below:\n%s", recipientName, confirmationLink)
 	log.Printf("---- END OF EMAIL (CONSOLE MOCK) ----")
 	return nil // Simulate successful send
 }

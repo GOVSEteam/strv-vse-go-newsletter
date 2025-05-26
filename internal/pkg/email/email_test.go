@@ -41,7 +41,7 @@ func TestConsoleEmailService_SendConfirmationEmail(t *testing.T) {
 				"---- SENDING CONFIRMATION EMAIL (CONSOLE MOCK) ----",
 				"To: test@example.com",
 				"Recipient Name: John Doe",
-				"Subject: Confirm Your Subscription",
+				"Subject:Your Newsletter Subscription Is Active",
 				"Hi John Doe,",
 				"https://example.com/confirm?token=abc123",
 				"---- END OF EMAIL (CONSOLE MOCK) ----",
