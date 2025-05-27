@@ -38,9 +38,8 @@ The Newsletter API provides comprehensive functionality for:
 
 ## Files
 
-- `swagger.yaml` - OpenAPI 3.0 specification (manually maintained)
-- `swagger.json` - Generated JSON specification
-- `docs.go` - Generated Go documentation package
+- `openapi.yaml` - OpenAPI 3.0 specification (manually maintained)
+- `README.md` - Documentation guide
 
 ## Authentication
 

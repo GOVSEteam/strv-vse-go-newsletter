@@ -27,9 +27,6 @@ import (
 
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/router"
 	"github.com/joho/godotenv"
-	
-	// Import docs for swagger
-	_ "github.com/GOVSEteam/strv-vse-go-newsletter/docs"
 )
 
 func main() {

@@ -45,8 +45,6 @@ func CleanupTestData(t *testing.T, db *sql.DB) {
 		"DELETE FROM posts WHERE title LIKE 'TEST_%'",
 		// Then clean up newsletters (depends on editors)  
 		"DELETE FROM newsletters WHERE name LIKE 'TEST_%'",
-		// Clean up password reset tokens (depends on editors)
-		"DELETE FROM password_reset_tokens WHERE editor_id IN (SELECT id FROM editors WHERE email LIKE 'test_%@example.com')",
 		// Finally, clean up editors
 		"DELETE FROM editors WHERE email LIKE 'test_%@example.com'",
 		// Also clean up any editors with TEST_ firebase UIDs
