@@ -4,6 +4,7 @@
 [![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat&logo=go)](https://golang.org/)
 [![Railway Deploy](https://img.shields.io/badge/Deploy-Railway-0B0D0E?style=flat&logo=railway)](https://railway.app)
 [![API Docs](https://img.shields.io/badge/API-Swagger-85EA2D?style=flat&logo=swagger)](https://strv-vse-go-newsletter-production.up.railway.app/swagger/index.html)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/GOVSEteam/strv-vse-go-newsletter)
 
 API backend for the STRV Semestral Project - Go Newsletter Platform.
 
