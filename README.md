@@ -2,10 +2,6 @@
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/GOVSEteam/strv-vse-go-newsletter)](https://goreportcard.com/report/github.com/GOVSEteam/strv-vse-go-newsletter)
 
-<!-- Add CI Badge later -->
-<!-- [![CI Status](https://github.com/GOVSEteam/strv-vse-go-newsletter/actions/workflows/ci.yml/badge.svg)](https://github.com/GOVSEteam/strv-vse-go-newsletter/actions/workflows/ci.yml) -->
-<!-- Add Coverage Badge later -->
-
 API backend for the STRV Semestral Project - Go Newsletter Platform.
 
 ## Overview
