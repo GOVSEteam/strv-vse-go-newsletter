@@ -10,93 +10,105 @@ API backend for the STRV Semestral Project - Go Newsletter Platform.
 
 ## Overview
 
-This service provides the API endpoints for:
+This service provides API endpoints for:
 
-- Editor registration and authentication.
-- Managing newsletters (create, rename, delete).
-- Managing posts within newsletters.
-- Subscribing users to newsletters via email.
-- Unsubscribing users.
-- Publishing newsletter posts to subscribers via email.
+- Editor registration and authentication (Firebase)
+- Managing newsletters (create, rename, delete)
+- Managing posts within newsletters
+- Subscribing users to newsletters via email
+- Publishing newsletter posts to subscribers via email
 
-## Prerequisites
+## Quick Start
 
-- [Go](https://golang.org/doc/install) (version 1.21 or later)
+1. **Clone and setup:**
+   ```bash
+   git clone https://github.com/GOVSEteam/strv-vse-go-newsletter.git
+   cd strv-vse-go-newsletter
+   cp .env.example .env
+   ```
 
-## Getting Started
+2. **Configure environment variables in `.env`:**
+   ```bash
+   # Database (PostgreSQL)
+   DATABASE_URL=your_postgres_connection_string
+   
+   # Firebase Authentication
+   FIREBASE_SERVICE_ACCOUNT=your_firebase_service_account_json
+   
+   # Email Service
+   EMAIL_FROM=your_email@domain.com
+   GOOGLE_APP_PASSWORD=your_app_password
+   
+   # Application
+   APP_BASE_URL=http://localhost:8080
+   ```
 
-1.  **Clone the repository:**
+3. **Run database migrations:**
+   ```bash
+   go run ./cmd/migrate/main.go
+   ```
 
-    ```bash
-    git clone https://github.com/GOVSEteam/strv-vse-go-newsletter.git
-    cd strv-vse-go-newsletter
-    ```
+4. **Start the server:**
+   ```bash
+   go run ./cmd/server/main.go
+   ```
 
-2.  **Configure Environment variables:**
+## API Documentation
 
-    Copy the example configuration from root:
+- **Local Swagger UI**: http://localhost:8080/swagger/index.html
+- **Production Swagger UI**: https://strv-vse-go-newsletter-production.up.railway.app/swagger/index.html
+- **Postman Collection**: `postman/Newsletter_API_Collection.json`
 
-    ```bash
-    cp .env.example .env
-    ```
-
-    Edit `.env` and fill in the required values (Database credentials, Firebase details, Email service keys, JWT secrets etc.).
-
-3.  **Run the Application:**
-
-    ```bash
-    go run ./cmd/server/main.go
-    ```
-
-## Running Tests
+## Testing
 
 ```bash
-# Quickly run all tests
+# Run all tests
 go test ./...
 
-# Detail report of every test (including coverage)
+# Run with coverage
 go test ./... -v -race -cover
+
+# Test API with Postman collection
+newman run postman/Newsletter_API_Collection.json -e postman/Newsletter_API_Environment.json
 ```
 
-## Commit Conventions
+## Architecture
 
-- **Feature**: A new feature or enhancement to existing functionality.
-- **Bugfix**: A bug fix or patch to existing functionality.
-- **Refactor**: Code refactoring or cleanup without changing functionality.
+**Layered Architecture:**
+- **Router** → **Handlers** → **Services** → **Repository** → **Database**
 
-## Branch naming rules
+**Key Packages:**
+- `cmd/server` - Main application entry point
+- `cmd/migrate` - Database migration tool
+- `internal/layers/handler` - HTTP request handlers
+- `internal/layers/service` - Business logic
+- `internal/layers/repository` - Data access layer
+- `internal/auth` - Firebase authentication
+- `internal/pkg/email` - Email functionality
 
-Commiting into main branch is not allowed. Changes should be made in separate branches and merged via pull requests.
+## Development
 
-- **Feature branches**: `feature/<description>` (e.g., `feature/user-auth`)
-- **Bugfix branches**: `bugfix/<description>` (e.g., `bugfix/fix-login-issue`)
-- **Refactor branches**: `refactor/<description>` (e.g., `refactor/code-cleanup`)
+**Branch naming:**
+- `feature/<description>` - New features
+- `bugfix/<description>` - Bug fixes  
+- `cleanup/<description>` - Code cleanup
 
-## Layered Architecture
-
-The project follows a layered architecture pattern, which separates concerns and promotes maintainability. The main layers are:
-
-- **Router**: Handles HTTP routing and delegates to handlers.
-- **Handlers**: Handle HTTP requests, parse input/output, and call services.
-- **Service**: Contains business logic, orchestrates repositories.
-- **Repository**: Handles data persistence.
+**Commit types:** `feature`, `bugfix`, `refactor`, `cleanup`
 
 ## Deployment
 
-App is running on https://railway.com/. The production URL is:
+**Production URL:** https://strv-vse-go-newsletter-production.up.railway.app
 
-`strv-vse-go-newsletter-production.up.railway.app`
-
-You can test if the APP is running by this powershell command:
-
-```powershell
-Invoke-WebRequest -Uri https://strv-vse-go-newsletter-production.up.railway.app/healthz -Method GET
+**Health check:**
+```bash
+curl https://strv-vse-go-newsletter-production.up.railway.app/healthz
 ```
 
-Or by opening the URL in your browser.
+**Database:** PostgreSQL on Railway (managed migrations via Railway console)
 
-## Database
+## Prerequisites
 
-The application uses **PostgreSQL** as the primary database for storing data. The database connection details are specified in the `.env` file.
-
-Given the size of the project and number of tables, automatic migrations are not implemented. If you want to change database schema, do that manually from the web administration console or, for more advanced use-cases, by running `railway connect` (you need to have the Railway CLI installed).
+- Go 1.21+
+- PostgreSQL database
+- Firebase project (for authentication)
+- Gmail account (for email service)
