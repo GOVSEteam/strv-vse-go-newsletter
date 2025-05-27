@@ -17,7 +17,6 @@ import (
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/setup"
 	
 	// Swagger imports
-	_ "github.com/GOVSEteam/strv-vse-go-newsletter/docs" // Import docs for swagger
 	"github.com/swaggo/http-swagger"
 )
 
