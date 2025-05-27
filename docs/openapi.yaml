@@ -235,6 +235,8 @@ paths:
       description: Get a paginated list of posts for a specific newsletter
       tags:
         - Posts
+      security:
+        - BearerAuth: []
       parameters:
         - name: newsletterID
           in: path
@@ -265,6 +267,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PostListResponse'
+        '401':
+          description: Unauthorized
         '404':
           description: Newsletter not found
 
