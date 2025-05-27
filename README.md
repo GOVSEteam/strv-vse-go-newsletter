@@ -1,6 +1,9 @@
 # STRV VSE Go Newsletter Service
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/GOVSEteam/strv-vse-go-newsletter)](https://goreportcard.com/report/github.com/GOVSEteam/strv-vse-go-newsletter)
+[![Go Version](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat&logo=go)](https://golang.org/)
+[![Railway Deploy](https://img.shields.io/badge/Deploy-Railway-0B0D0E?style=flat&logo=railway)](https://railway.app)
+[![API Docs](https://img.shields.io/badge/API-Swagger-85EA2D?style=flat&logo=swagger)](https://strv-vse-go-newsletter-production.up.railway.app/swagger/index.html)
 
 API backend for the STRV Semestral Project - Go Newsletter Platform.
 
