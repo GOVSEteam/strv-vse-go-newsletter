@@ -1,50 +1,44 @@
 package post_handler
 
 import (
-	"errors"
 	"net/http"
 
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/auth"
-	globalHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler"
+	"github.com/go-chi/chi/v5"
+
+	apperrors "github.com/GOVSEteam/strv-vse-go-newsletter/internal/errors"
+	commonHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
-	"github.com/google/uuid"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/middleware"
 )
 
 func GetPostByIDHandler(svc service.NewsletterServiceInterface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			globalHandler.JSONError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		// GetPostForEditor requires editorID, so we need to get it from context
+		editorID := middleware.GetEditorIDFromContext(r.Context())
+		if editorID == "" {
+			// This implies that auth middleware did not run or failed to set editorID
+			// which should ideally be caught by the middleware itself.
+			// However, as a safeguard:
+			commonHandler.JSONError(w, "Unauthorized: editor ID not available", http.StatusUnauthorized)
 			return
 		}
 
-		// TODO: Replace with auth middleware
-		_, err := auth.VerifyFirebaseJWT(r)
-		if err != nil {
-			globalHandler.JSONError(w, "Invalid or missing token: "+err.Error(), http.StatusUnauthorized)
-			return
-		}
-
-		postIDStr := r.PathValue("postID") // Assuming pattern like /posts/{postID}
+		postIDStr := chi.URLParam(r, "postID")
 		if postIDStr == "" {
-			globalHandler.JSONError(w, "Post ID is required in path", http.StatusBadRequest)
-			return
-		}
-		postID, err := uuid.Parse(postIDStr)
-		if err != nil {
-			globalHandler.JSONError(w, "Invalid post ID format", http.StatusBadRequest)
+			commonHandler.JSONError(w, "Post ID is required in path", http.StatusBadRequest)
 			return
 		}
 
-		post, err := svc.GetPostByID(r.Context(), postID)
+		// The service method GetPostForEditor should be used to ensure ownership.
+		// It expects the editor's Auth ID (which is what GetEditorIDFromContext provides)
+		// and the post ID.
+		post, err := svc.GetPostForEditor(r.Context(), editorID, postIDStr)
 		if err != nil {
-			if errors.Is(err, service.ErrPostNotFound) {
-				globalHandler.JSONError(w, "Post not found", http.StatusNotFound)
-			} else {
-				globalHandler.JSONError(w, "Failed to get post: "+err.Error(), http.StatusInternalServerError)
-			}
+			statusCode := apperrors.ErrorToHTTPStatus(err)
+			commonHandler.JSONError(w, err.Error(), statusCode)
 			return
 		}
 
-		globalHandler.JSONResponse(w, post, http.StatusOK)
+		commonHandler.JSONResponse(w, post, http.StatusOK)
 	}
 }
