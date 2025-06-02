@@ -2,8 +2,12 @@ package editor
 
 import (
 	"encoding/json"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
+	"fmt"
 	"net/http"
+
+	apperrors "github.com/GOVSEteam/strv-vse-go-newsletter/internal/errors"
+	commonHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
 )
 
 type signUpRequest struct {
@@ -14,28 +18,40 @@ type signUpRequest struct {
 type signUpResponse struct {
 	EditorID string `json:"editor_id"`
 	Email    string `json:"email"`
+	// Could also include CreatedAt from models.Editor if desired
 }
 
-func EditorSignUpHandler(svc service.EditorService) http.HandlerFunc {
+// EditorSignUpHandler handles new editor registration.
+func EditorSignUpHandler(svc service.EditorServiceInterface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
 		var req signUpRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Email == "" || req.Password == "" {
-			w.WriteHeader(http.StatusBadRequest)
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			commonHandler.JSONError(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
 			return
 		}
-		editor, err := svc.SignUp(req.Email, req.Password)
+
+		// Basic validation for required fields. More complex validation (e.g. email format, pass length)
+		// is handled by the EditorService.
+		if req.Email == "" {
+			err := fmt.Errorf("email cannot be empty: %w", apperrors.ErrValidation)
+			commonHandler.JSONError(w, err.Error(), apperrors.ErrorToHTTPStatus(err))
+			return
+		}
+		if req.Password == "" {
+			err := fmt.Errorf("password cannot be empty: %w", apperrors.ErrValidation)
+			commonHandler.JSONError(w, err.Error(), apperrors.ErrorToHTTPStatus(err))
+			return
+		}
+
+		editor, err := svc.SignUp(r.Context(), req.Email, req.Password)
 		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			statusCode := apperrors.ErrorToHTTPStatus(err)
+			// log.Printf("Error editor sign up: %v", err)
+			commonHandler.JSONError(w, err.Error(), statusCode)
 			return
 		}
+
 		resp := signUpResponse{EditorID: editor.ID, Email: editor.Email}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(resp)
+		commonHandler.JSONResponse(w, resp, http.StatusCreated)
 	}
 }
