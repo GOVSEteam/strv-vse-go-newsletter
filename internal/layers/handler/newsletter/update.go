@@ -1,15 +1,16 @@
 package newsletter
 
 import (
-	"database/sql"
+	// "database/sql" // No longer directly checked
 	"encoding/json"
-	"errors"
+	// "errors" // No longer directly checked
 	"net/http"
 
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/auth"
+	apperrors "github.com/GOVSEteam/strv-vse-go-newsletter/internal/errors"
 	commonHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/middleware"
+	// models is implicitly used by the service return type, no direct handler use here for response struct
 )
 
 // UpdateNewsletterRequest defines the expected request body for updating a newsletter.
@@ -19,7 +20,9 @@ type UpdateNewsletterRequest struct {
 	Description *string `json:"description"`
 }
 
-func UpdateHandler(svc service.NewsletterServiceInterface, editorRepo repository.EditorRepository) http.HandlerFunc {
+// UpdateHandler handles partial updates to a newsletter.
+// It relies on AuthMiddleware for authentication and editor ID retrieval.
+func UpdateHandler(svc service.NewsletterServiceInterface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPatch {
 			commonHandler.JSONError(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -32,15 +35,10 @@ func UpdateHandler(svc service.NewsletterServiceInterface, editorRepo repository
 			return
 		}
 
-		firebaseUID, err := auth.VerifyFirebaseJWT(r)
-		if err != nil {
-			commonHandler.JSONError(w, "Invalid or missing token", http.StatusUnauthorized)
-			return
-		}
-
-		editor, err := editorRepo.GetEditorByFirebaseUID(firebaseUID)
-		if err != nil {
-			commonHandler.JSONError(w, "Editor not found or not authorized", http.StatusForbidden)
+		editorAuthID := middleware.GetEditorIDFromContext(r.Context())
+		if editorAuthID == "" {
+			// This case should ideally be prevented by the AuthMiddleware.
+			commonHandler.JSONError(w, "Unauthorized: editor ID not found in context", http.StatusUnauthorized)
 			return
 		}
 
@@ -50,31 +48,22 @@ func UpdateHandler(svc service.NewsletterServiceInterface, editorRepo repository
 			return
 		}
 
-		// Input validation
+		// Input validation: if name is provided, it cannot be empty.
+		// More comprehensive validation (e.g., length) is in the service layer.
 		if req.Name != nil && *req.Name == "" {
-			commonHandler.JSONError(w, "Newsletter name, if provided, cannot be empty", http.StatusBadRequest)
+			err := apperrors.ErrNameEmpty // Or a more specific validation error for update
+			commonHandler.JSONError(w, err.Error(), apperrors.ErrorToHTTPStatus(err))
 			return
 		}
-		// Ensure at least one field is provided for update if that's a requirement.
-		// For now, an empty PATCH request will just bump updated_at.
-		if req.Name == nil && req.Description == nil {
-			// commonHandler.JSONError(w, "At least one field (name or description) must be provided for update", http.StatusBadRequest)
-			// return
-			// Or, allow this to simply touch updated_at. The RFC implies rename/description update.
-			// Let's proceed, it will just update `updated_at` if both are nil.
-		}
+		// The service layer will handle the case where both req.Name and req.Description are nil
+		// (e.g., by only updating timestamps or returning a validation error if no change is made).
 
-		updatedNewsletter, err := svc.UpdateNewsletter(r.Context(), newsletterID, editor.ID, req.Name, req.Description)
+		// The service UpdateNewsletter expects editorAuthID (e.g. FirebaseUID), newsletterID, and pointers for name/description.
+		updatedNewsletter, err := svc.UpdateNewsletter(r.Context(), editorAuthID, newsletterID, req.Name, req.Description)
 		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				commonHandler.JSONError(w, "Newsletter not found or you don't have permission to update it", http.StatusNotFound) // Or StatusForbidden
-			} else if errors.Is(err, service.ErrNewsletterNameTaken) {
-				commonHandler.JSONError(w, service.ErrNewsletterNameTaken.Error(), http.StatusConflict)
-			} else {
-				// Log the full error for server-side debugging
-				// log.Printf("Error updating newsletter %s: %v", newsletterID, err)
-				commonHandler.JSONError(w, "Failed to update newsletter: "+err.Error(), http.StatusInternalServerError)
-			}
+			statusCode := apperrors.ErrorToHTTPStatus(err)
+			// log.Printf("Error updating newsletter %s: %v", newsletterID, err) // Example logging
+			commonHandler.JSONError(w, err.Error(), statusCode)
 			return
 		}
 

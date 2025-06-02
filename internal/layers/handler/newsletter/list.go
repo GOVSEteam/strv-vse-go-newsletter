@@ -4,10 +4,11 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/auth"
+	apperrors "github.com/GOVSEteam/strv-vse-go-newsletter/internal/errors"
 	commonHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository" // Need this for the response struct
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/middleware"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models" // For models.Newsletter in response
 )
 
 const (
@@ -16,33 +17,28 @@ const (
 	DefaultOffset = 0
 )
 
+// PaginatedNewslettersResponse defines the structure for paginated newsletter lists.
+// It now uses models.Newsletter.
 type PaginatedNewslettersResponse struct {
-	Data       []repository.Newsletter `json:"data"`
-	Total      int                     `json:"total"`
-	Limit      int                     `json:"limit"`
-	Offset     int                     `json:"offset"`
+	Data   []models.Newsletter `json:"data"`
+	Total  int                 `json:"total"`
+	Limit  int                 `json:"limit"`
+	Offset int                 `json:"offset"`
 }
 
-func ListHandler(svc service.NewsletterServiceInterface, editorRepo repository.EditorRepository) http.HandlerFunc {
+// ListHandler handles requests to list newsletters for the authenticated editor.
+// It relies on AuthMiddleware to provide the editor's ID.
+func ListHandler(svc service.NewsletterServiceInterface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			commonHandler.JSONError(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		firebaseUID, err := auth.VerifyFirebaseJWT(r)
-		if err != nil {
-			commonHandler.JSONError(w, "Invalid or missing token", http.StatusUnauthorized)
-			return
-		}
-
-		editor, err := editorRepo.GetEditorByFirebaseUID(firebaseUID)
-		if err != nil {
-			commonHandler.JSONError(w, "Editor not found or not authorized", http.StatusForbidden)
+		editorID := middleware.GetEditorIDFromContext(r.Context())
+		if editorID == "" {
+			// This case should ideally be prevented by the AuthMiddleware.
+			commonHandler.JSONError(w, "Unauthorized: editor ID not found in context", http.StatusUnauthorized)
 			return
 		}
 
 		// Parse query parameters for pagination
+		var err error // Declare err here for use in parsing
 		limitStr := r.URL.Query().Get("limit")
 		limit := DefaultLimit
 		if limitStr != "" {
@@ -66,14 +62,17 @@ func ListHandler(svc service.NewsletterServiceInterface, editorRepo repository.E
 			}
 		}
 
-		newsletters, total, err := svc.ListNewslettersByEditorID(r.Context(), editor.ID, limit, offset)
+		// Service method ListNewslettersByEditorID expects the editor's database ID.
+		newsletters, total, err := svc.ListNewslettersByEditorID(r.Context(), editorID, limit, offset)
 		if err != nil {
-			commonHandler.JSONError(w, "Failed to list newsletters: "+err.Error(), http.StatusInternalServerError)
+			statusCode := apperrors.ErrorToHTTPStatus(err)
+			// log.Printf("Error listing newsletters: %v", err) // Example logging
+			commonHandler.JSONError(w, err.Error(), statusCode)
 			return
 		}
 
 		response := PaginatedNewslettersResponse{
-			Data:   newsletters,
+			Data:   newsletters, // This is now []models.Newsletter
 			Total:  total,
 			Limit:  limit,
 			Offset: offset,
