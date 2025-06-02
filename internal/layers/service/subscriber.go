@@ -255,7 +255,7 @@ func (s *SubscriberService) GetActiveSubscribersForNewsletter(ctx context.Contex
 
 	// First, check if the newsletter exists to avoid querying for subscribers of a non-existent newsletter.
 	// This is optional but good practice.
-	newsletter, err := s.newsletterRepo.GetNewsletterByID(newsletterID)
+	newsletter, err := s.newsletterRepo.GetNewsletterByID(ctx, newsletterID)
 	if err != nil {
 		// This could be a DB error or other issue fetching the newsletter.
 		return nil, fmt.Errorf("error checking newsletter existence: %w", err)
@@ -264,11 +264,21 @@ func (s *SubscriberService) GetActiveSubscribersForNewsletter(ctx context.Contex
 		return nil, ErrNewsletterNotFound // Or a more specific error.
 	}
 
-	subscribers, err := s.subscriberRepo.GetActiveSubscribersByNewsletterID(ctx, newsletterID)
+	// Get all subscribers and filter for active ones
+	allSubscribers, _, err := s.subscriberRepo.ListSubscribersByNewsletterID(ctx, newsletterID, -1, 0) // -1 for all
 	if err != nil {
-		return nil, fmt.Errorf("failed to get active subscribers: %w", err)
+		return nil, fmt.Errorf("failed to get subscribers: %w", err)
 	}
-	return subscribers, nil
+	
+	// Filter for active subscribers
+	var activeSubscribers []models.Subscriber
+	for _, sub := range allSubscribers {
+		if sub.Status == models.SubscriberStatusActive {
+			activeSubscribers = append(activeSubscribers, sub)
+		}
+	}
+	
+	return activeSubscribers, nil
 }
 
 func (s *SubscriberService) ListActiveSubscribersByNewsletterID(ctx context.Context, editorAuthID string, newsletterID string, limit, offset int) ([]models.Subscriber, int, error) {

@@ -16,10 +16,10 @@ import (
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models"
 )
 
-//go:embed ../../queries/editor/insert.sql
+//go:embed queries/editor/insert.sql
 var insertEditorQuery string
 
-//go:embed ../../queries/editor/get_by_firebase_uid.sql
+//go:embed queries/editor/get_by_firebase_uid.sql
 var getEditorByFirebaseUIDQuery string
 
 // ErrEditorNotFound is returned when an editor is not found

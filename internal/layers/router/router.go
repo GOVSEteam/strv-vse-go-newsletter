@@ -2,7 +2,6 @@ package router
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"net/http"
 	"os"
@@ -132,13 +131,13 @@ func NewRouter(deps RouterDependencies) *chi.Mux {
 }
 
 // healthHandler checks the health of essential services like the database.
-func healthHandler(db *sql.DB, firestoreClient *firestore.Client) http.HandlerFunc {
+func healthHandler(db *pgxpool.Pool, firestoreClient *firestore.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Check DB
 		if db != nil {
 			ctxDB, cancelDB := context.WithTimeout(r.Context(), 5*time.Second)
 			defer cancelDB()
-			if err := db.PingContext(ctxDB); err != nil {
+			if err := db.Ping(ctxDB); err != nil {
 				http.Error(w, fmt.Sprintf("DB health check failed: %v", err), http.StatusServiceUnavailable)
 				return
 			}
@@ -174,7 +173,7 @@ func healthHandler(db *sql.DB, firestoreClient *firestore.Client) http.HandlerFu
 
 // readinessHandler checks if the application is ready to serve traffic.
 // This might include checks similar to health but could also verify if all initial setup is complete.
-func readinessHandler(db *sql.DB, firestoreClient *firestore.Client) http.HandlerFunc {
+func readinessHandler(db *pgxpool.Pool, firestoreClient *firestore.Client) http.HandlerFunc {
 	// For now, readiness is the same as health. Can be expanded later.
 	return healthHandler(db, firestoreClient)
 }

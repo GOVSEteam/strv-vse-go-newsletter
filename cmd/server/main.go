@@ -31,12 +31,11 @@ import (
 	"time"
 
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/config"
-	// "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler" // Placeholder
-	// "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository" // Placeholder
-	// "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/router" // Placeholder for new chi router
-	// "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service" // Placeholder
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/router"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/setup"
-	// "github.com/GOVSEteam/strv-vse-go-newsletter/internal/worker" // Placeholder
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/worker"
 
 	_ "github.com/joho/godotenv/autoload" // Autoload .env file
 	"go.uber.org/zap"
@@ -65,122 +64,116 @@ func main() {
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	sugar.Infof("Main context created: %v (used for graceful shutdown and DI)", ctx) // Dummy use
+	sugar.Infof("Main context created: %v (used for graceful shutdown and DI)", ctx)
 
-	// Initialize Database Connection (Placeholder for Step 27)
+	// Initialize Database Connection
 	sugar.Info("Initializing database connection...")
-	// dbPool, err := setup.ConnectDB(ctx, cfg.GetDatabaseURL()) // ConnectDB will be refactored to return *pgxpool.Pool and error
-	// The existing setup.ConnectDB() returns *sql.DB and panics on error, no ctx or URL yet.
-	// For now, let's assume it returns a generic closable interface to allow compilation.
-	type closable interface{ Close() error }
-	var dbPool closable // This is a temporary placeholder
-	// sqlDB := setup.ConnectDB() // Call existing function, will be replaced
-	// dbPool = sqlDB // Assign to the interface
-	sugar.Infof("dbPool placeholder: %v (actual setup in Step 27)", dbPool) // Dummy use
+	dbPool, err := setup.ConnectDB(ctx, cfg.GetDatabaseURL())
+	if err != nil {
+		sugar.Fatalf("Error connecting to database: %v", err)
+	}
+	sugar.Info("Database connection established")
+	defer func() {
+		sugar.Info("Closing database connection pool...")
+		if dbPool != nil {
+			dbPool.Close()
+		}
+		sugar.Info("Database connection pool closed.")
+	}()
 
-	// if err != nil { // This error handling will be used when ConnectDB is refactored
-	// 	sugar.Fatalf("Error connecting to database: %v", err)
-	// }
-	sugar.Info("Database connection established (placeholder)")
-	// // Close database connection on shutdown (pgxpool.Pool has Close method)
-	// defer func() {
-	// 	sugar.Info("Closing database connection pool...")
-	// 	if dbPool != nil {
-	// 	 dbPool.Close() // This will be *pgxpool.Pool in the future
-	// 	}
-	// 	sugar.Info("Database connection pool closed (placeholder).")
-	// }()
-
-	// Initialize Firebase (Placeholder for Step 28)
+	// Initialize Firebase
 	sugar.Info("Initializing Firebase app...")
-	// firebaseApp, err := setup.NewFirebaseApp(ctx, cfg.FirebaseServiceAccount)
-	// if err != nil {
-	// 	sugar.Fatalf("Error initializing Firebase app: %v", err)
-	// }
-	// sugar.Info("Firebase app initialized")
+	firebaseApp, err := setup.NewFirebaseApp(ctx, cfg.FirebaseServiceAccount)
+	if err != nil {
+		sugar.Fatalf("Error initializing Firebase app: %v", err)
+	}
+	sugar.Info("Firebase app initialized")
 
-	// firebaseAuthClient, err := setup.NewAuthClient(ctx, firebaseApp)
-	// if err != nil {
-	// 	sugar.Fatalf("Error initializing Firebase Auth client: %v", err)
-	// }
-	// sugar.Info("Firebase Auth client initialized")
+	firebaseAuthClient, err := setup.NewAuthClient(ctx, firebaseApp)
+	if err != nil {
+		sugar.Fatalf("Error initializing Firebase Auth client: %v", err)
+	}
+	sugar.Info("Firebase Auth client initialized")
 
-	// firestoreClient, err := setup.NewFirestoreClient(ctx, firebaseApp)
-	// if err != nil {
-	// 	sugar.Fatalf("Error initializing Firestore client: %v", err)
-	// }
-	// sugar.Info("Firestore client initialized")
-	var firestoreClient closable // Placeholder for *firestore.Client
-	sugar.Infof("firestoreClient placeholder: %v (actual setup in Step 28)", firestoreClient) // Dummy use
-	// // Close Firestore client on shutdown
-	// defer func() {
-	// 	sugar.Info("Closing Firestore client...")
-	// 	if firestoreClient != nil {
-	// 	 if err := firestoreClient.Close(); err != nil {
-	// 		 sugar.Errorf("Error closing Firestore client: %v", err)
-	// 	 } else {
-	// 		 sugar.Info("Firestore client closed (placeholder).")
-	// 	 }
-	// 	}
-	// }()
+	firestoreClient, err := setup.NewFirestoreClient(ctx, firebaseApp)
+	if err != nil {
+		sugar.Fatalf("Error initializing Firestore client: %v", err)
+	}
+	sugar.Info("Firestore client initialized")
+	defer func() {
+		sugar.Info("Closing Firestore client...")
+		if firestoreClient != nil {
+			if err := firestoreClient.Close(); err != nil {
+				sugar.Errorf("Error closing Firestore client: %v", err)
+			} else {
+				sugar.Info("Firestore client closed.")
+			}
+		}
+	}()
 
-	// Initialize Repositories (Placeholder for Steps 13-16)
+	// Initialize Repositories
 	sugar.Info("Initializing repositories...")
-	// editorRepo := repository.NewEditorRepository(dbPool) // Example placeholder
-	// newsletterRepo := repository.NewNewsletterRepository(dbPool) // Example placeholder
-	// postRepo := repository.NewPostRepository(dbPool) // Example placeholder
-	// subscriberRepo := repository.NewSubscriberRepository(firestoreClient) // Example placeholder
-	sugar.Info("Repositories initialized (placeholders)")
+	editorRepo := repository.EditorRepo(dbPool)
+	newsletterRepo := repository.NewsletterRepo(dbPool)
+	postRepo := repository.NewPostRepository(dbPool)
+	subscriberRepo := repository.NewFirestoreSubscriberRepository(firestoreClient)
+	sugar.Info("Repositories initialized")
 
-	// Initialize Email Service and Worker (Placeholders for Step 9 and 25)
+	// Initialize Email Service and Worker
 	sugar.Info("Initializing email service and worker...")
-	// emailService := service.NewGmailEmailService(cfg) // Example placeholder
-	// emailWorker := worker.NewEmailWorker(emailService, 100) // Example placeholder
-	// go emailWorker.Start(ctx, 5) // Start worker pool
-	sugar.Info("Email service and worker initialized (placeholders)")
+	emailServiceConfig := service.GmailEmailServiceConfig{
+		From:     cfg.EmailFrom,
+		Password: cfg.GoogleAppPassword,
+		SMTPHost: "smtp.gmail.com", // Default, consider adding to config.Config
+		SMTPPort: "587",            // Default, consider adding to config.Config
+	}
+	emailService, err := service.NewGmailEmailService(emailServiceConfig, zap.NewStdLog(logger))
+	if err != nil {
+		sugar.Fatalf("Error initializing email service: %v", err)
+	}
+	emailWorker := worker.NewEmailWorker(emailService, 100) // emailWorker is the EmailJobQueuer
+	go emailWorker.Start(ctx, 5)
+	sugar.Info("Email service and worker initialized")
 
-	// Initialize Services (Placeholder for Steps 17-20, and 10)
+	// Initialize Services
 	sugar.Info("Initializing services...")
-	// authSvc := service.NewFirebasePasswordResetService(cfg, &http.Client{}) // Example placeholder
-	// editorSvc := service.NewEditorService(editorRepo, firebaseAuthClient) // Example placeholder
-	// newsletterSvc := service.NewNewsletterService(newsletterRepo) // Example placeholder
-	// postSvc := service.NewPostService(postRepo) // Example placeholder
-	// subscriberSvc := service.NewSubscriberService(subscriberRepo, emailService) // Example placeholder
-	sugar.Info("Services initialized (placeholders)")
+	firebasePasswordResetConfig := service.FirebasePasswordResetServiceConfig{
+		APIKey:     cfg.FirebaseAPIKey,
+		HTTPClient: &http.Client{Timeout: 10 * time.Second},
+		Logger:     zap.NewStdLog(logger),
+	}
+	passwordResetSvc, err := service.NewFirebasePasswordResetService(firebasePasswordResetConfig) // Renamed from authSvc to match router
+	if err != nil {
+		sugar.Fatalf("Error initializing password reset service: %v", err)
+	}
+	editorSvc := service.NewEditorService(editorRepo, firebaseAuthClient, &http.Client{Timeout: 10 * time.Second}, cfg.FirebaseAPIKey)
+	newsletterSvc := service.NewNewsletterService(newsletterRepo, postRepo, editorRepo)
+	subscriberSvc := service.NewSubscriberService(subscriberRepo, newsletterRepo, editorRepo, emailService, cfg.AppBaseURL)
+	publishingSvc := service.NewPublishingService(newsletterSvc, subscriberSvc, emailWorker) // Added PublishingService
+	sugar.Info("Services initialized")
 
-	// Initialize Handlers (Placeholder for Steps 21-24, and 30)
-	sugar.Info("Initializing handlers...")
-	// healthHandler := handler.NewHealthHandler(dbPool, firestoreClient) // Example placeholder
-	// editorHandler := handler.NewEditorHandler(editorSvc, authSvc) // Example placeholder
-	// newsletterHandler := handler.NewNewsletterHandler(newsletterSvc) // Example placeholder
-	// postHandler := handler.NewPostHandler(postSvc) // Example placeholder
-	// subscriberHandler := handler.NewSubscriberHandler(subscriberSvc) // Example placeholder
-	sugar.Info("Handlers initialized (placeholders)")
-
-	// Initialize Chi Router with Middleware and Handlers (Placeholder for Step 26)
+	// Initialize Chi Router
 	sugar.Info("Initializing Chi router...")
-	// mainRouter := router.NewChiRouter( // This will be the new Chi router setup
-	// 	logger.Sugar(),
-	// 	cfg, // For CORS, rate limiting config
-	// 	firebaseAuthClient, // For auth middleware
-	// 	editorRepo, // For auth middleware
-	// 	healthHandler,
-	// 	editorHandler,
-	// 	newsletterHandler,
-	// 	postHandler,
-	// 	subscriberHandler,
-	// ) // Example placeholder
-	// Temp placeholder for existing router to allow compilation until Step 26
-	tempRouter := http.NewServeMux()
-	tempRouter.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "pong")
-	})
-	sugar.Info("Chi router initialized (placeholder - using temp simple router)")
+	routerDeps := router.RouterDependencies{
+		DB:                  dbPool, // The router expects *sql.DB, but we have *pgxpool.Pool. This needs to be addressed.
+		FirestoreClient:     firestoreClient,
+		FirebaseAuthClient:  firebaseAuthClient,
+		EditorService:       editorSvc,
+		NewsletterService:   newsletterSvc,
+		SubscriberService:   subscriberSvc,
+		PublishingService:   publishingSvc,
+		PasswordResetSvc:    passwordResetSvc,
+		EmailJobQueuer:      emailWorker,
+		EditorRepo:          editorRepo,
+		Logger:              sugar, // Pass the sugared logger
+	}
+	mainRouter := router.NewRouter(routerDeps)
+	sugar.Info("Chi router initialized")
 
 	// HTTP Server Setup
 	server := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Port),
-		Handler: tempRouter, // Will be mainRouter (Chi router)
+		Handler: mainRouter, // Will be mainRouter (Chi router)
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,

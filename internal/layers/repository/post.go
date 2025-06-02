@@ -16,25 +16,25 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-//go:embed ../../queries/post/create.sql
+//go:embed queries/post/create.sql
 var createPostQuery string
 
-//go:embed ../../queries/post/get_by_id.sql
+//go:embed queries/post/get_by_id.sql
 var getPostByIDQuery string
 
-//go:embed ../../queries/post/list_by_newsletter_id.sql
+//go:embed queries/post/list_by_newsletter_id.sql
 var listPostsByNewsletterIDQuery string
 
-//go:embed ../../queries/post/count_by_newsletter_id.sql
+//go:embed queries/post/count_by_newsletter_id.sql
 var countPostsByNewsletterIDQuery string
 
-//go:embed ../../queries/post/update.sql
+//go:embed queries/post/update.sql
 var updatePostQuery string
 
-//go:embed ../../queries/post/delete.sql
+//go:embed queries/post/delete.sql
 var deletePostQuery string
 
-//go:embed ../../queries/post/mark_as_published.sql
+//go:embed queries/post/mark_as_published.sql
 var markPostAsPublishedQuery string
 
 // dbPost is an internal struct used for scanning database rows.

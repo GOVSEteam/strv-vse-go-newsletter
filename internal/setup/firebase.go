@@ -2,56 +2,49 @@ package setup
 
 import (
 	"context"
+	"fmt"
 
 	"cloud.google.com/go/firestore"
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/auth"
 	"google.golang.org/api/option"
-	"log"
-	"os"
 )
 
-var authClient *auth.Client
-var firestoreClient *firestore.Client
-
-func InitFirebase() {
-	credJSON := os.Getenv("FIREBASE_SERVICE_ACCOUNT")
-	if credJSON == "" {
-		log.Fatal("FIREBASE_SERVICE_ACCOUNT env-var is not set")
+// NewFirebaseApp initializes and returns a new Firebase app.
+// It requires a context and the Firebase service account JSON as a string.
+func NewFirebaseApp(ctx context.Context, serviceAccountJSON string) (*firebase.App, error) {
+	if serviceAccountJSON == "" {
+		return nil, fmt.Errorf("Firebase service account JSON is required")
 	}
 
-	opt := option.WithCredentialsJSON([]byte(credJSON))
-	app, err := firebase.NewApp(context.Background(), nil, opt)
+	opt := option.WithCredentialsJSON([]byte(serviceAccountJSON))
+	app, err := firebase.NewApp(ctx, nil, opt)
 	if err != nil {
-		log.Fatalf("error initializing Firebase app: %v", err)
+		return nil, fmt.Errorf("failed to initialize Firebase app: %w", err)
 	}
-
-	client, err := app.Auth(context.Background())
-	if err != nil {
-		log.Fatalf("error getting Auth client: %v", err)
-	}
-	authClient = client
-
-	fsClient, err := app.Firestore(context.Background())
-	if err != nil {
-		log.Fatalf("error getting Firestore client: %v", err)
-	}
-	firestoreClient = fsClient
-	log.Println("Firebase Auth and Firestore clients initialized.")
+	return app, nil
 }
 
-func GetAuthClient() *auth.Client {
-	if authClient == nil {
-		log.Println("Auth client not initialized, calling InitFirebase().")
-		InitFirebase()
+// NewAuthClient initializes and returns a new Firebase Auth client from a Firebase app.
+func NewAuthClient(ctx context.Context, app *firebase.App) (*auth.Client, error) {
+	if app == nil {
+		return nil, fmt.Errorf("Firebase app is required to create Auth client")
 	}
-	return authClient
+	client, err := app.Auth(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Firebase Auth client: %w", err)
+	}
+	return client, nil
 }
 
-func GetFirestoreClient() *firestore.Client {
-	if firestoreClient == nil {
-		log.Println("Firestore client not initialized, calling InitFirebase().")
-		InitFirebase()
+// NewFirestoreClient initializes and returns a new Firestore client from a Firebase app.
+func NewFirestoreClient(ctx context.Context, app *firebase.App) (*firestore.Client, error) {
+	if app == nil {
+		return nil, fmt.Errorf("Firebase app is required to create Firestore client")
 	}
-	return firestoreClient
+	client, err := app.Firestore(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Firestore client: %w", err)
+	}
+	return client, nil
 }
