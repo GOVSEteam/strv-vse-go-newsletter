@@ -2,24 +2,62 @@ package repository
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"cloud.google.com/go/firestore"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models" // Assuming this path is correct
-	"google.golang.org/api/iterator"                              // For checking iterator.Done
+	apperrors "github.com/GOVSEteam/strv-vse-go-newsletter/internal/errors"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models"
+	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 const subscribersCollection = "subscribers"
 
+// dbSubscriber is an internal struct used for Firestore document mapping.
+// It contains firestore tags for field names.
+type dbSubscriber struct {
+	Email            string                 `firestore:"email"`
+	NewsletterID     string                 `firestore:"newsletter_id"`
+	SubscriptionDate time.Time              `firestore:"subscription_date"`
+	Status           models.SubscriberStatus `firestore:"status"`
+	UnsubscribeToken string                 `firestore:"unsubscribe_token,omitempty"`
+	// ID is the Firestore document ID and is not stored as a field in the document.
+}
+
+// toDomain converts a dbSubscriber (and its Firestore document ID) to a models.Subscriber.
+func (dbS *dbSubscriber) toDomain(docID string) models.Subscriber {
+	return models.Subscriber{
+		ID:               docID,
+		Email:            dbS.Email,
+		NewsletterID:     dbS.NewsletterID,
+		SubscriptionDate: dbS.SubscriptionDate,
+		Status:           dbS.Status,
+		UnsubscribeToken: dbS.UnsubscribeToken,
+	}
+}
+
+// fromDomain converts a models.Subscriber to a map suitable for creating/updating a Firestore document.
+// The ID field from models.Subscriber is ignored as it's managed as the Firestore document ID.
+func fromDomain(s models.Subscriber) map[string]interface{} {
+	return map[string]interface{}{
+		"email":             s.Email,
+		"newsletter_id":     s.NewsletterID,
+		"subscription_date": s.SubscriptionDate,
+		"status":            s.Status,
+		"unsubscribe_token": s.UnsubscribeToken,
+	}
+}
+
 // SubscriberRepository defines the interface for subscriber data persistence.
 type SubscriberRepository interface {
 	CreateSubscriber(ctx context.Context, subscriber models.Subscriber) (string, error)
 	GetSubscriberByEmailAndNewsletterID(ctx context.Context, email string, newsletterID string) (*models.Subscriber, error)
+	ListSubscribersByNewsletterID(ctx context.Context, newsletterID string, limit int, offset int) ([]models.Subscriber, int, error)
 	UpdateSubscriberStatus(ctx context.Context, subscriberID string, status models.SubscriberStatus) error
 	UpdateSubscriberUnsubscribeToken(ctx context.Context, subscriberID string, newToken string) error
-	GetSubscriberByUnsubscribeToken(ctx context.Context, token string) (*models.Subscriber, error)            // New method
-	GetActiveSubscribersByNewsletterID(ctx context.Context, newsletterID string) ([]models.Subscriber, error) // New method
+	GetSubscriberByUnsubscribeToken(ctx context.Context, token string) (*models.Subscriber, error)
 }
 
 // firestoreSubscriberRepository implements SubscriberRepository using Firestore.
@@ -29,150 +67,141 @@ type firestoreSubscriberRepository struct {
 
 // NewFirestoreSubscriberRepository creates a new firestoreSubscriberRepository.
 func NewFirestoreSubscriberRepository(client *firestore.Client) SubscriberRepository {
-	if client == nil {
-		// This should ideally be handled by a panic or a more robust error at startup
-		// if the client isn't available, but for now, we'll return nil
-		// or a repository that always errors. For simplicity, let's assume client is always provided.
-		// log.Fatal("Firestore client is nil in NewFirestoreSubscriberRepository")
-	}
 	return &firestoreSubscriberRepository{client: client}
 }
 
-// CreateSubscriber adds a new subscriber document to the Firestore "subscribers" collection.
-// It returns the ID of the newly created document or an error.
 func (r *firestoreSubscriberRepository) CreateSubscriber(ctx context.Context, subscriber models.Subscriber) (string, error) {
-	// We might want to check for existing exact email + newsletterID combination here
-	// to prevent duplicates, or handle it at the service layer.
-	// For now, we'll assume Firestore generates a unique ID or we ensure uniqueness elsewhere.
-
-	docRef, _, err := r.client.Collection(subscribersCollection).Add(ctx, subscriber)
+	dataToWrite := fromDomain(subscriber)
+	docRef, _, err := r.client.Collection(subscribersCollection).Add(ctx, dataToWrite)
 	if err != nil {
-		// It's good practice to wrap or check for specific Firestore errors if needed.
-		// For example, checking for codes.AlreadyExists if we were setting a specific document ID.
-		return "", status.Errorf(codes.Internal, "failed to create subscriber in Firestore: %v", err)
+		// Consider checking for specific gRPC codes if applicable for Add (e.g., permission denied)
+		return "", fmt.Errorf("subscriber repo: CreateSubscriber: %w: %v", apperrors.ErrInternal, err)
 	}
 	return docRef.ID, nil
 }
 
-// GetSubscriberByEmailAndNewsletterID retrieves a subscriber by their email and a specific newsletter ID.
-// Returns (nil, nil) if not found, or the subscriber and nil error if found.
 func (r *firestoreSubscriberRepository) GetSubscriberByEmailAndNewsletterID(ctx context.Context, email string, newsletterID string) (*models.Subscriber, error) {
 	iter := r.client.Collection(subscribersCollection).
 		Where("email", "==", email).
 		Where("newsletter_id", "==", newsletterID).
 		Limit(1).
 		Documents(ctx)
-
 	defer iter.Stop()
 
 	doc, err := iter.Next()
-	if err == iterator.Done {
-		return nil, nil // Not found
-	}
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to query Firestore for subscriber: %v", err)
-	}
-
-	var subscriber models.Subscriber
-	if err := doc.DataTo(&subscriber); err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to decode subscriber data: %v", err)
-	}
-	subscriber.ID = doc.Ref.ID // Populate the ID from the document reference
-	return &subscriber, nil
-}
-
-// UpdateSubscriberStatus updates the status of a specific subscriber document in Firestore.
-func (r *firestoreSubscriberRepository) UpdateSubscriberStatus(ctx context.Context, subscriberID string, newStatus models.SubscriberStatus) error {
-	docRef := r.client.Collection(subscribersCollection).Doc(subscriberID)
-
-	_, err := docRef.Update(ctx, []firestore.Update{
-		{
-			Path:  "status",
-			Value: newStatus,
-		},
-	})
-
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return status.Errorf(codes.NotFound, "subscriber with ID %s not found for update", subscriberID)
+		if err == iterator.Done {
+			return nil, fmt.Errorf("subscriber repo: GetSubscriberByEmailAndNewsletterID: %w", apperrors.ErrSubscriberNotFound)
 		}
-		return status.Errorf(codes.Internal, "failed to update subscriber status in Firestore: %v", err)
+		return nil, fmt.Errorf("subscriber repo: GetSubscriberByEmailAndNewsletterID: query: %w: %v", apperrors.ErrInternal, err)
 	}
-	return nil
+
+	var dbSub dbSubscriber
+	if errData := doc.DataTo(&dbSub); errData != nil {
+		return nil, fmt.Errorf("subscriber repo: GetSubscriberByEmailAndNewsletterID: decode: %w: %v", apperrors.ErrInternal, errData)
+	}
+	modelSub := dbSub.toDomain(doc.Ref.ID)
+	return &modelSub, nil
 }
 
-func (r *firestoreSubscriberRepository) UpdateSubscriberUnsubscribeToken(ctx context.Context, subscriberID string, newToken string) error {
-	docRef := r.client.Collection(subscribersCollection).Doc(subscriberID)
+func (r *firestoreSubscriberRepository) ListSubscribersByNewsletterID(ctx context.Context, newsletterID string, limit int, offset int) ([]models.Subscriber, int, error) {
+	collRef := r.client.Collection(subscribersCollection)
 
-	_, err := docRef.Update(ctx, []firestore.Update{
-		{
-			Path:  "unsubscribe_token",
-			Value: newToken,
-		},
-	})
+	// Get total count
+	// Build the aggregation query from the base collection reference, then apply filters for the aggregation.
+	countQuery := collRef.Where("newsletter_id", "==", newsletterID)
+	aggregationQuery := countQuery.NewAggregationQuery().WithCount("all")
+	countSnapshot, err := aggregationQuery.Get(ctx)
 	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return status.Errorf(codes.NotFound, "subscriber with ID %s not found for update", subscriberID)
-		}
-		return status.Errorf(codes.Internal, "failed to update unsubscribe token in Firestore: %v", err)
+		return nil, 0, fmt.Errorf("subscriber repo: ListSubscribersByNewsletterID: count query: %w: %v", apperrors.ErrInternal, err)
 	}
-	return nil
-}
-
-// GetSubscriberByUnsubscribeToken retrieves a subscriber by their unsubscribe token.
-// Returns (nil, nil) if not found.
-func (r *firestoreSubscriberRepository) GetSubscriberByUnsubscribeToken(ctx context.Context, token string) (*models.Subscriber, error) {
-	iter := r.client.Collection(subscribersCollection).
-		Where("unsubscribe_token", "==", token).
-		Limit(1).
-		Documents(ctx)
-
-	defer iter.Stop()
-
-	doc, err := iter.Next()
-	if err == iterator.Done {
-		return nil, nil // Not found
+	countValue, ok := countSnapshot["all"]
+	if !ok {
+		return nil, 0, fmt.Errorf("subscriber repo: ListSubscribersByNewsletterID: count aggregation did not return 'all' field: %w", apperrors.ErrInternal)
 	}
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to query Firestore for subscriber by unsubscribe token: %v", err)
-	}
+	totalCount := int(countValue.(int64))
 
-	var subscriber models.Subscriber
-	if err := doc.DataTo(&subscriber); err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to decode subscriber data by unsubscribe token: %v", err)
-	}
-	subscriber.ID = doc.Ref.ID
-	return &subscriber, nil
-}
-
-// GetActiveSubscribersByNewsletterID retrieves all active subscribers for a specific newsletter ID.
-func (r *firestoreSubscriberRepository) GetActiveSubscribersByNewsletterID(ctx context.Context, newsletterID string) ([]models.Subscriber, error) {
-	var subscribers []models.Subscriber
-	iter := r.client.Collection(subscribersCollection).
+	// Get paginated list
+	query := collRef.
 		Where("newsletter_id", "==", newsletterID).
-		Where("status", "==", models.SubscriberStatusActive). // Only active subscribers
-		Documents(ctx)
+		OrderBy("subscription_date", firestore.Desc). // Ensure consistent ordering for pagination
+		Offset(offset).
+		Limit(limit)
 
+	iter := query.Documents(ctx)
 	defer iter.Stop()
 
+	var subscribers []models.Subscriber
 	for {
 		doc, err := iter.Next()
 		if err == iterator.Done {
 			break
 		}
 		if err != nil {
-			return nil, status.Errorf(codes.Internal, "failed to iterate active subscribers: %v", err)
+			return nil, 0, fmt.Errorf("subscriber repo: ListSubscribersByNewsletterID: iterate: %w: %v", apperrors.ErrInternal, err)
 		}
-
-		var sub models.Subscriber
-		if err := doc.DataTo(&sub); err != nil {
-			// Log or handle individual decoding errors, but continue if possible
-			// For now, we'll return an error on the first decode failure.
-			return nil, status.Errorf(codes.Internal, "failed to decode active subscriber data: %v", err)
+		var dbSub dbSubscriber
+		if errData := doc.DataTo(&dbSub); errData != nil {
+			// Log potentially and consider if a single decode error should fail the whole list
+			return nil, 0, fmt.Errorf("subscriber repo: ListSubscribersByNewsletterID: decode: %w: %v", apperrors.ErrInternal, errData)
 		}
-		sub.ID = doc.Ref.ID
-		subscribers = append(subscribers, sub)
+		subscribers = append(subscribers, dbSub.toDomain(doc.Ref.ID))
 	}
 
-	return subscribers, nil
+	return subscribers, totalCount, nil
+}
+
+func (r *firestoreSubscriberRepository) UpdateSubscriberStatus(ctx context.Context, subscriberID string, newStatus models.SubscriberStatus) error {
+	updates := []firestore.Update{
+		{Path: "status", Value: newStatus},
+		// {Path: "updated_at", Value: firestore.ServerTimestamp}, // If an updated_at field were present
+	}
+	_, err := r.client.Collection(subscribersCollection).Doc(subscriberID).Update(ctx, updates)
+	if err != nil {
+		st, _ := status.FromError(err)
+		if st.Code() == codes.NotFound {
+			return fmt.Errorf("subscriber repo: UpdateSubscriberStatus: %w: id %s", apperrors.ErrSubscriberNotFound, subscriberID)
+		}
+		return fmt.Errorf("subscriber repo: UpdateSubscriberStatus: %w: %v", apperrors.ErrInternal, err)
+	}
+	return nil
+}
+
+func (r *firestoreSubscriberRepository) UpdateSubscriberUnsubscribeToken(ctx context.Context, subscriberID string, newToken string) error {
+	updates := []firestore.Update{
+		{Path: "unsubscribe_token", Value: newToken},
+		// {Path: "updated_at", Value: firestore.ServerTimestamp}, // If an updated_at field were present
+	}
+	_, err := r.client.Collection(subscribersCollection).Doc(subscriberID).Update(ctx, updates)
+	if err != nil {
+		st, _ := status.FromError(err)
+		if st.Code() == codes.NotFound {
+			return fmt.Errorf("subscriber repo: UpdateSubscriberUnsubscribeToken: %w: id %s", apperrors.ErrSubscriberNotFound, subscriberID)
+		}
+		return fmt.Errorf("subscriber repo: UpdateSubscriberUnsubscribeToken: %w: %v", apperrors.ErrInternal, err)
+	}
+	return nil
+}
+
+func (r *firestoreSubscriberRepository) GetSubscriberByUnsubscribeToken(ctx context.Context, token string) (*models.Subscriber, error) {
+	iter := r.client.Collection(subscribersCollection).
+		Where("unsubscribe_token", "==", token).
+		Limit(1).
+		Documents(ctx)
+	defer iter.Stop()
+
+	doc, err := iter.Next()
+	if err != nil {
+		if err == iterator.Done {
+			return nil, fmt.Errorf("subscriber repo: GetSubscriberByUnsubscribeToken: %w", apperrors.ErrSubscriberNotFound)
+		}
+		return nil, fmt.Errorf("subscriber repo: GetSubscriberByUnsubscribeToken: query: %w: %v", apperrors.ErrInternal, err)
+	}
+
+	var dbSub dbSubscriber
+	if errData := doc.DataTo(&dbSub); errData != nil {
+		return nil, fmt.Errorf("subscriber repo: GetSubscriberByUnsubscribeToken: decode: %w: %v", apperrors.ErrInternal, errData)
+	}
+	modelSub := dbSub.toDomain(doc.Ref.ID)
+	return &modelSub, nil
 }
