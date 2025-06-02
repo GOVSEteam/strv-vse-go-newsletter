@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors" // For basic error creation
 	"fmt"
-	"os"
+	"net/mail"
+	"regexp"
+	"strings"
 	"time"
 
+	apperrors "github.com/GOVSEteam/strv-vse-go-newsletter/internal/errors"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/pkg/email" // Added email package
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models" // Added email package
 	"github.com/google/uuid"
 )
 
@@ -28,26 +30,46 @@ var ErrInvalidOrExpiredToken = errors.New("confirmation token is invalid or expi
 // ErrAlreadyConfirmed is returned when a subscription is already confirmed.
 var ErrAlreadyConfirmed = errors.New("subscription is already confirmed")
 
+// EmailRegex is reused from editor_service, consider moving to a common util if used in more places.
+var subscriberEmailRegex = regexp.MustCompile(`^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,4}$`)
+
+const (
+	DefaultSubscriptionListPageLimit = 10
+	UnsubscribeEmailSubject          = "Subscription Confirmed & Unsubscribe Link"
+	WelcomeBackEmailSubject          = "Welcome Back & Unsubscribe Link"
+)
+
+// SubscriberServiceInterface defines the operations for subscriber management.
+// Note: The EmailServiceInterface dependency is implicitly expected by NewSubscriberService.
 type SubscriberServiceInterface interface {
-	SubscribeToNewsletter(ctx context.Context, req SubscribeToNewsletterRequest) (*SubscribeToNewsletterResponse, error)
-	UnsubscribeFromNewsletter(ctx context.Context, req UnsubscribeFromNewsletterRequest) error // Will likely be deprecated
+	SubscribeToNewsletter(ctx context.Context, email, newsletterID string) (*models.Subscriber, error)
 	UnsubscribeByToken(ctx context.Context, token string) error
-	GetActiveSubscribersForNewsletter(ctx context.Context, newsletterID string) ([]models.Subscriber, error) // Added for SUB-003
+	ListActiveSubscribersByNewsletterID(ctx context.Context, editorAuthID string, newsletterID string, limit, offset int) ([]models.Subscriber, int, error)
 }
 
 // SubscriberService handles business logic for subscriber management.
 type SubscriberService struct {
 	subscriberRepo repository.SubscriberRepository
 	newsletterRepo repository.NewsletterRepository
-	emailService   email.EmailService
+	editorRepo     repository.EditorRepository // For authorization
+	emailService   EmailService              // Corrected: Uses EmailService interface from this package
+	appBaseURL     string                    // For generating unsubscribe links, e.g., "http://localhost:8080"
 }
 
 // NewSubscriberService creates a new SubscriberService.
-func NewSubscriberService(subRepo repository.SubscriberRepository, newsRepo repository.NewsletterRepository, emailSvc email.EmailService) SubscriberServiceInterface { // Return interface
+func NewSubscriberService(
+	subRepo repository.SubscriberRepository,
+	newsRepo repository.NewsletterRepository,
+	editorRepo repository.EditorRepository,
+	emailSvc EmailService, // Corrected: Expecting EmailService interface from this package
+	appBaseURL string,
+) SubscriberServiceInterface {
 	return &SubscriberService{
 		subscriberRepo: subRepo,
 		newsletterRepo: newsRepo,
+		editorRepo:     editorRepo,
 		emailService:   emailSvc,
+		appBaseURL:     appBaseURL,
 	}
 }
 
@@ -67,114 +89,92 @@ type SubscribeToNewsletterResponse struct {
 
 // SubscribeToNewsletter processes a subscription request.
 // It creates a new subscriber record with a pending_confirmation status and triggers a confirmation email.
-func (s *SubscriberService) SubscribeToNewsletter(ctx context.Context, req SubscribeToNewsletterRequest) (*SubscribeToNewsletterResponse, error) {
-	if req.Email == "" {
-		return nil, errors.New("email cannot be empty")
+func (s *SubscriberService) SubscribeToNewsletter(ctx context.Context, email, newsletterID string) (*models.Subscriber, error) {
+	email = strings.TrimSpace(strings.ToLower(email))
+	newsletterID = strings.TrimSpace(newsletterID)
+
+	if email == "" {
+		return nil, fmt.Errorf("service: SubscribeToNewsletter: %w: email cannot be empty", apperrors.ErrValidation)
 	}
-	if req.NewsletterID == "" {
-		return nil, errors.New("newsletter ID cannot be empty")
+	if _, err := mail.ParseAddress(email); err != nil || !subscriberEmailRegex.MatchString(email) {
+		return nil, fmt.Errorf("service: SubscribeToNewsletter: %w '%s'", apperrors.ErrInvalidEmail, email)
+	}
+	if newsletterID == "" {
+		return nil, fmt.Errorf("service: SubscribeToNewsletter: %w: newsletterID cannot be empty", apperrors.ErrValidation)
 	}
 
-	newsletter, err := s.newsletterRepo.GetNewsletterByID(req.NewsletterID)
+	newsletter, err := s.newsletterRepo.GetNewsletterByID(ctx, newsletterID)
 	if err != nil {
-		return nil, err
-	}
-	if newsletter == nil {
-		return nil, ErrNewsletterNotFound
-	}
-
-	existingSub, err := s.subscriberRepo.GetSubscriberByEmailAndNewsletterID(ctx, req.Email, req.NewsletterID)
-	if err != nil {
-		return nil, err
-	}
-	if existingSub != nil {
-		switch existingSub.Status {
-		case models.SubscriberStatusUnsubscribed:
-			// User previously unsubscribed: reactivate and resend confirmation
-			existingSub.Status = models.SubscriberStatusActive
-			existingSub.SubscriptionDate = time.Now().UTC()
-			existingSub.UnsubscribeToken = uuid.NewString()
-
-			err = s.subscriberRepo.UpdateSubscriberStatus(ctx, existingSub.ID, models.SubscriberStatusActive)
-			if err != nil {
-				return nil, fmt.Errorf("failed to reactivate subscriber: %w", err)
-			}
-
-			err = s.subscriberRepo.UpdateSubscriberUnsubscribeToken(ctx, existingSub.ID, existingSub.UnsubscribeToken)
-			if err != nil {
-				return nil, fmt.Errorf("failed to save new token to subscriber: %w", err)
-			}
-
-			// (Re-)build the unsubscribe link
-			appBaseURL := os.Getenv("APP_BASE_URL")
-			if appBaseURL == "" {
-				appBaseURL = "http://localhost:8080"
-			}
-			unsubscribeLink := fmt.Sprintf("%s/api/subscriptions/unsubscribe?token=%s", appBaseURL, existingSub.UnsubscribeToken)
-
-			// Resend confirmation/unsubscribe email
-			if err := s.emailService.SendConfirmationEmail(
-				existingSub.Email,
-				existingSub.Email,
-				unsubscribeLink,
-			); err != nil {
-				// log but don’t fail the overall flow
-				fmt.Printf("Error resending confirmation email to %s: %v\n", existingSub.Email, err)
-			}
-
-			// Return the reactivated response
-			return &SubscribeToNewsletterResponse{
-				SubscriberID: existingSub.ID,
-				Email:        existingSub.Email,
-				NewsletterID: existingSub.NewsletterID,
-				Status:       existingSub.Status,
-			}, nil
-
-		default:
-			// already active status
-			return nil, ErrAlreadySubscribed
+		if errors.Is(err, apperrors.ErrNewsletterNotFound) {
+			return nil, fmt.Errorf("service: SubscribeToNewsletter: newsletter '%s' %w", newsletterID, apperrors.ErrNotFound)
 		}
+		return nil, fmt.Errorf("service: SubscribeToNewsletter: checking newsletter: %w", err)
 	}
 
-	unsubscribeToken := uuid.NewString() // Generate unsubscribe token
+	existingSub, err := s.subscriberRepo.GetSubscriberByEmailAndNewsletterID(ctx, email, newsletterID)
+	if err != nil && !errors.Is(err, apperrors.ErrSubscriberNotFound) {
+		return nil, fmt.Errorf("service: SubscribeToNewsletter: checking existing subscription: %w", err)
+	}
+
+	unsubscribeToken := uuid.NewString()
+	now := time.Now().UTC()
+
+	if existingSub != nil {
+		if existingSub.Status == models.SubscriberStatusActive {
+			return nil, fmt.Errorf("service: SubscribeToNewsletter: %w: email '%s' is already actively subscribed to newsletter '%s'", apperrors.ErrConflict, email, newsletter.Name)
+		}
+		if existingSub.Status == models.SubscriberStatusUnsubscribed {
+			existingSub.Status = models.SubscriberStatusActive
+			existingSub.SubscriptionDate = now
+			existingSub.UnsubscribeToken = unsubscribeToken
+
+			if err := s.subscriberRepo.UpdateSubscriberStatus(ctx, existingSub.ID, models.SubscriberStatusActive); err != nil {
+				return nil, fmt.Errorf("service: SubscribeToNewsletter: reactivating subscriber status: %w", err)
+			}
+			if err := s.subscriberRepo.UpdateSubscriberUnsubscribeToken(ctx, existingSub.ID, unsubscribeToken); err != nil {
+				return nil, fmt.Errorf("service: SubscribeToNewsletter: updating token for reactivated subscriber: %w", err)
+			}
+
+			unsubscribeLink := fmt.Sprintf("%s/api/v1/subscriptions/unsubscribe/%s", s.appBaseURL, unsubscribeToken)
+			bodyMsg := fmt.Sprintf("Welcome back! You have been re-subscribed to '%s'. If you wish to unsubscribe, please use this link: %s", newsletter.Name, unsubscribeLink)
+			go func(emailAddr, subject, bodyContent string) {
+				bgCtx := context.Background() // Use a background context for the goroutine
+				if emailErr := s.emailService.SendEmail(bgCtx, emailAddr, subject, bodyContent); emailErr != nil {
+					fmt.Printf("WARN: service: SubscribeToNewsletter: failed to send welcome back email to %s: %v\n", emailAddr, emailErr)
+				}
+			}(existingSub.Email, WelcomeBackEmailSubject, bodyMsg)
+
+			// Return a model representing the updated state.
+			// The existingSub was modified in place and these changes were persisted.
+			return existingSub, nil
+		}
+		return nil, fmt.Errorf("service: SubscribeToNewsletter: %w: email '%s' has an unexpected status for newsletter '%s'", apperrors.ErrConflict, email, newsletter.Name)
+	}
 
 	subscriber := models.Subscriber{
-		Email:            req.Email,
-		NewsletterID:     req.NewsletterID,
-		SubscriptionDate: time.Now().UTC(),
+		Email:            email,
+		NewsletterID:     newsletterID,
+		SubscriptionDate: now,
 		Status:           models.SubscriberStatusActive,
 		UnsubscribeToken: unsubscribeToken,
 	}
 
-	subscriberID, err := s.subscriberRepo.CreateSubscriber(ctx, subscriber)
+	subscriberIDVal, err := s.subscriberRepo.CreateSubscriber(ctx, subscriber)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create subscriber: %w", err)
+		return nil, fmt.Errorf("service: SubscribeToNewsletter: creating subscriber: %w", err)
 	}
+	subscriber.ID = subscriberIDVal
 
-	appBaseURL := os.Getenv("APP_BASE_URL") // e.g., http://localhost:8080
-	if appBaseURL == "" {
-		appBaseURL = "http://localhost:8080" // Default if not set
-		fmt.Println("Warning: APP_BASE_URL not set, defaulting to http://localhost:8080 for unsubscribe links.")
-	}
+	unsubscribeLink := fmt.Sprintf("%s/api/v1/subscriptions/unsubscribe/%s", s.appBaseURL, unsubscribeToken)
+	bodyMsg := fmt.Sprintf("Thank you for subscribing to '%s'! If you wish to unsubscribe, please use this link: %s", newsletter.Name, unsubscribeLink)
+	go func(emailAddr, subject, bodyContent string) {
+		bgCtx := context.Background() // Use a background context for the goroutine
+		if emailErr := s.emailService.SendEmail(bgCtx, emailAddr, subject, bodyContent); emailErr != nil {
+			fmt.Printf("WARN: service: SubscribeToNewsletter: failed to send confirmation email to %s: %v\n", emailAddr, emailErr)
+		}
+	}(subscriber.Email, UnsubscribeEmailSubject, bodyMsg)
 
-	unsubscribeLink := fmt.Sprintf("%s/api/subscriptions/unsubscribe?token=%s", appBaseURL, subscriber.UnsubscribeToken)
-
-	// The recipient name for the email; using email if no other name is available.
-	err = s.emailService.SendConfirmationEmail(subscriber.Email, subscriber.Email, unsubscribeLink)
-	if err != nil {
-		// For now, we just log it.
-		// Consider how to handle this critical step failing in a production system.
-		fmt.Printf("Error sending confirmation email to %s: %v\n", subscriber.Email, err)
-		// Depending on requirements, you might want to return an error here or proceed.
-		// For this example, we proceed, as the subscriber is created.
-	}
-
-	return &SubscribeToNewsletterResponse{
-		SubscriberID: subscriberID,
-		Email:        subscriber.Email,
-		NewsletterID: subscriber.NewsletterID,
-		Status:       subscriber.Status, // Will be pending_confirmation
-	}, nil
+	return &subscriber, nil
 }
 
 // UnsubscribeFromNewsletterRequest defines the input for unsubscribing from a newsletter.
@@ -211,31 +211,32 @@ func (s *SubscriberService) UnsubscribeFromNewsletter(ctx context.Context, req U
 
 // UnsubscribeByToken processes an unsubscription request using a token.
 func (s *SubscriberService) UnsubscribeByToken(ctx context.Context, token string) error {
+	token = strings.TrimSpace(token)
 	if token == "" {
-		return errors.New("unsubscribe token cannot be empty")
+		return fmt.Errorf("service: UnsubscribeByToken: %w: unsubscribe token cannot be empty", apperrors.ErrValidation)
 	}
 
 	subscriber, err := s.subscriberRepo.GetSubscriberByUnsubscribeToken(ctx, token)
 	if err != nil {
-		// This is a server-side error from the repository
-		return fmt.Errorf("error retrieving subscriber by unsubscribe token: %w", err)
-	}
-	if subscriber == nil {
-		return ErrInvalidOrExpiredToken // Using this error for simplicity, could be a more specific "unsubscribe token not found"
+		if errors.Is(err, apperrors.ErrSubscriberNotFound) {
+			return fmt.Errorf("service: UnsubscribeByToken: %w: invalid or expired token", apperrors.ErrTokenInvalid)
+		}
+		return fmt.Errorf("service: UnsubscribeByToken: retrieving subscriber by token: %w", err)
 	}
 
 	if subscriber.Status == models.SubscriberStatusUnsubscribed {
 		return nil // Already unsubscribed
 	}
 
-	err = s.subscriberRepo.UpdateSubscriberUnsubscribeToken(ctx, subscriber.ID, "")
-	if err != nil {
-		return fmt.Errorf("failed to remove unsubscribe token: %w", err)
+	if err := s.subscriberRepo.UpdateSubscriberUnsubscribeToken(ctx, subscriber.ID, ""); err != nil {
+		// Log original error for server visibility, return a generic one to user if needed for security.
+		fmt.Printf("ERROR: service: UnsubscribeByToken: failed to invalidate token for subscriber %s: %v\n", subscriber.ID, err)
+		return fmt.Errorf("service: UnsubscribeByToken: failed to update token state: %w", apperrors.ErrInternal) 
 	}
 
-	err = s.subscriberRepo.UpdateSubscriberStatus(ctx, subscriber.ID, models.SubscriberStatusUnsubscribed)
-	if err != nil {
-		return fmt.Errorf("failed to update subscriber status for unsubscription: %w", err)
+	if err := s.subscriberRepo.UpdateSubscriberStatus(ctx, subscriber.ID, models.SubscriberStatusUnsubscribed); err != nil {
+		fmt.Printf("ERROR: service: UnsubscribeByToken: failed to update status for subscriber %s: %v\n", subscriber.ID, err)
+		return fmt.Errorf("service: UnsubscribeByToken: failed to update subscription status: %w", apperrors.ErrInternal)
 	}
 
 	return nil
@@ -268,4 +269,54 @@ func (s *SubscriberService) GetActiveSubscribersForNewsletter(ctx context.Contex
 		return nil, fmt.Errorf("failed to get active subscribers: %w", err)
 	}
 	return subscribers, nil
+}
+
+func (s *SubscriberService) ListActiveSubscribersByNewsletterID(ctx context.Context, editorAuthID string, newsletterID string, limit, offset int) ([]models.Subscriber, int, error) {
+	newsletterID = strings.TrimSpace(newsletterID)
+	editorAuthID = strings.TrimSpace(editorAuthID)
+
+	if newsletterID == "" {
+		return nil, 0, fmt.Errorf("service: ListActiveSubscribers: %w: newsletterID cannot be empty", apperrors.ErrValidation)
+	}
+	if editorAuthID == "" {
+		return nil, 0, fmt.Errorf("service: ListActiveSubscribers: %w: editorAuthID cannot be empty for authorization", apperrors.ErrValidation)
+	}
+
+	editor, err := s.editorRepo.GetEditorByFirebaseUID(ctx, editorAuthID)
+	if err != nil {
+		if errors.Is(err, apperrors.ErrEditorNotFound) {
+			return nil, 0, fmt.Errorf("service: ListActiveSubscribers: %w", apperrors.ErrForbidden)
+		}
+		return nil, 0, fmt.Errorf("service: ListActiveSubscribers: getting editor: %w", err)
+	}
+	retrievedNewsletter, err := s.newsletterRepo.GetNewsletterByID(ctx, newsletterID)
+	if err != nil {
+		if errors.Is(err, apperrors.ErrNewsletterNotFound) {
+			return nil, 0, fmt.Errorf("service: ListActiveSubscribers: newsletter '%s' %w", newsletterID, apperrors.ErrNotFound)
+		}
+		return nil, 0, fmt.Errorf("service: ListActiveSubscribers: getting newsletter: %w", err)
+	}
+	if retrievedNewsletter.EditorID != editor.ID {
+		return nil, 0, fmt.Errorf("service: ListActiveSubscribers: %w: editor does not own newsletter '%s'", apperrors.ErrForbidden, newsletterID)
+	}
+
+	if limit <= 0 {
+		limit = DefaultSubscriptionListPageLimit
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	allSubscribersInPage, totalCountForAllStatuses, err := s.subscriberRepo.ListSubscribersByNewsletterID(ctx, newsletterID, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("service: ListActiveSubscribers: listing subscribers from repo: %w", err)
+	}
+
+	activeSubscribers := make([]models.Subscriber, 0, len(allSubscribersInPage))
+	for _, sub := range allSubscribersInPage {
+		if sub.Status == models.SubscriberStatusActive {
+			activeSubscribers = append(activeSubscribers, sub)
+		}
+	}
+	return activeSubscribers, totalCountForAllStatuses, nil
 }
