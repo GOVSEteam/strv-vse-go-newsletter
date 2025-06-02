@@ -2,46 +2,48 @@ package service
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
+	apperrors "github.com/GOVSEteam/strv-vse-go-newsletter/internal/errors"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models"
 	"github.com/google/uuid"
 )
 
-// ErrNewsletterNameTaken is returned when a newsletter name is already in use by an editor.
-var ErrNewsletterNameTaken = errors.New("newsletter name already taken by this editor")
-var ErrPostNotFound = errors.New("post not found")
-var ErrServiceNewsletterNotFound = errors.New("newsletter not found in newsletter service") // Renamed
-var ErrForbidden = errors.New("forbidden: editor does not own this resource")
-var ErrPostTitleEmpty = errors.New("post title cannot be empty") // New Error
-var ErrPostContentEmpty = errors.New("post content cannot be empty") // New Error
+const (
+	MaxNewsletterNameLength        = 100
+	MaxNewsletterDescriptionLength = 255
+	MaxPostTitleLength             = 150
+	MinPostContentLength           = 10 // Arbitrary minimum
+)
 
 type NewsletterServiceInterface interface {
 	// Newsletter methods
-	ListNewslettersByEditorID(ctx context.Context, editorID string, limit int, offset int) ([]repository.Newsletter, int, error)
-	CreateNewsletter(ctx context.Context, editorID, name, description string) (*repository.Newsletter, error)
-	UpdateNewsletter(ctx context.Context, newsletterID string, editorID string, name *string, description *string) (*repository.Newsletter, error)
-	DeleteNewsletter(ctx context.Context, newsletterID string, editorID string) error
-	GetNewsletterByID(ctx context.Context, newsletterID string) (*repository.Newsletter, error) // Added for ownership checks
+	ListNewslettersByEditorID(ctx context.Context, editorID string, limit int, offset int) ([]models.Newsletter, int, error)
+	CreateNewsletter(ctx context.Context, editorID, name, description string) (*models.Newsletter, error)
+	GetNewsletterByID(ctx context.Context, newsletterID string) (*models.Newsletter, error) // For internal/service use, ownership checked by caller if needed
+	GetNewsletterForEditor(ctx context.Context, editorID, newsletterID string) (*models.Newsletter, error) // For editor-specific get with ownership
+	UpdateNewsletter(ctx context.Context, editorID string, newsletterID string, name *string, description *string) (*models.Newsletter, error)
+	DeleteNewsletter(ctx context.Context, editorID string, newsletterID string) error
 
 	// Post methods
-	CreatePost(ctx context.Context, editorFirebaseUID string, newsletterID uuid.UUID, title string, content string) (*models.Post, error)
-	GetPostByID(ctx context.Context, postID uuid.UUID) (*models.Post, error)
-	ListPostsByNewsletter(ctx context.Context, newsletterID uuid.UUID, limit int, offset int) ([]*models.Post, int, error)
-	UpdatePost(ctx context.Context, editorFirebaseUID string, postID uuid.UUID, title *string, content *string) (*models.Post, error)
-	DeletePost(ctx context.Context, editorFirebaseUID string, postID uuid.UUID) error
-	MarkPostAsPublished(ctx context.Context, editorFirebaseUID string, postID uuid.UUID) error
-	GetPostForPublishing(ctx context.Context, postID uuid.UUID, editorFirebaseUID string) (*models.Post, error) // New method
+	CreatePost(ctx context.Context, editorID string, newsletterID string, title string, content string) (*models.Post, error)
+	GetPostByID(ctx context.Context, postID string) (*models.Post, error) // General get, ownership might be checked by caller
+	GetPostForEditor(ctx context.Context, editorID string, postID string) (*models.Post, error) // For editor-specific get with ownership of post's newsletter
+	ListPostsByNewsletterID(ctx context.Context, newsletterID string, limit int, offset int) ([]models.Post, int, error)
+	UpdatePost(ctx context.Context, editorID string, postID string, title *string, content *string, publishedAt *time.Time) (*models.Post, error)
+	DeletePost(ctx context.Context, editorID string, postID string) error
+	PublishPost(ctx context.Context, editorID string, postID string) (*models.Post, error)
+	UnpublishPost(ctx context.Context, editorID string, postID string) (*models.Post, error)
 }
 
 type newsletterService struct {
 	newsletterRepo repository.NewsletterRepository
 	postRepo       repository.PostRepository
-	editorRepo     repository.EditorRepository // Added for ownership checks
+	editorRepo     repository.EditorRepository
 }
 
 func NewNewsletterService(
@@ -56,274 +58,418 @@ func NewNewsletterService(
 	}
 }
 
-// ListNewsletters is deprecated, use ListNewslettersByEditorID
-// func (s *newsletterService) ListNewsletters() ([]repository.Newsletter, error) {
-// 	return s.newsletterRepo.ListNewsletters()
-// }
+// --- Authorization Helper ---
 
-// ListNewslettersByEditorID fetches a paginated list of newsletters for a specific editor.
-func (s *newsletterService) ListNewslettersByEditorID(ctx context.Context, editorID string, limit int, offset int) ([]repository.Newsletter, int, error) {
-	// Add any specific business logic for listing if needed.
-	// For now, it's a direct pass-through to the repository.
-	return s.newsletterRepo.ListNewslettersByEditorID(editorID, limit, offset)
-}
-
-func (s *newsletterService) CreateNewsletter(ctx context.Context, editorID, name, description string) (*repository.Newsletter, error) {
-	// Check for name uniqueness
-	existing, err := s.newsletterRepo.GetNewsletterByNameAndEditorID(name, editorID)
+// verifyNewsletterOwnershipAndGetEditor retrieves the editor and newsletter,
+// verifies ownership, and returns both if successful.
+func (s *newsletterService) verifyNewsletterOwnershipAndGetEditor(ctx context.Context, editorAuthID string, newsletterID string) (*models.Editor, *models.Newsletter, error) {
+	editor, err := s.editorRepo.GetEditorByFirebaseUID(ctx, editorAuthID) // Assuming editorAuthID is FirebaseUID
 	if err != nil {
-		return nil, err // DB error during check
-	}
-	if existing != nil {
-		return nil, ErrNewsletterNameTaken
-	}
-	return s.newsletterRepo.CreateNewsletter(editorID, name, description)
-}
-
-// UpdateNewsletter handles the business logic for updating a newsletter.
-func (s *newsletterService) UpdateNewsletter(ctx context.Context, newsletterID string, editorID string, name *string, description *string) (*repository.Newsletter, error) {
-	// If name is being updated, check for uniqueness
-	if name != nil && *name != "" { // Also ensure name is not being set to empty if provided
-		existingWithNewName, err := s.newsletterRepo.GetNewsletterByNameAndEditorID(*name, editorID)
-		if err != nil {
-			return nil, err // DB error during check
+		if errors.Is(err, apperrors.ErrEditorNotFound) {
+			return nil, nil, fmt.Errorf("service: verifyNewsletterOwnership: %w", apperrors.ErrForbidden) // Editor for token not found
 		}
-		// If a newsletter with the new name exists AND it's not the current newsletter being updated
-		if existingWithNewName != nil && existingWithNewName.ID != newsletterID {
-			return nil, ErrNewsletterNameTaken
-		}
+		return nil, nil, fmt.Errorf("service: verifyNewsletterOwnership: getting editor: %w", err) // Internal error
 	}
-	return s.newsletterRepo.UpdateNewsletter(newsletterID, editorID, name, description)
-}
 
-// DeleteNewsletter handles the business logic for deleting a newsletter.
-func (s *newsletterService) DeleteNewsletter(ctx context.Context, newsletterID string, editorID string) error {
-	// The repository's DeleteNewsletter method checks for ownership
-	// and returns sql.ErrNoRows if not found/not owned.
-	// Note: Deletion of related posts should be handled by ON DELETE CASCADE in the database schema.
-	return s.newsletterRepo.DeleteNewsletter(newsletterID, editorID)
-}
-
-func (s *newsletterService) GetNewsletterByID(ctx context.Context, newsletterID string) (*repository.Newsletter, error) {
-	nl, err := s.newsletterRepo.GetNewsletterByID(newsletterID)
+	newsletter, err := s.newsletterRepo.GetNewsletterByID(ctx, newsletterID)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, apperrors.ErrNewsletterNotFound) {
+			return nil, nil, fmt.Errorf("service: verifyNewsletterOwnership: %w", apperrors.ErrNewsletterNotFound)
+		}
+		return nil, nil, fmt.Errorf("service: verifyNewsletterOwnership: getting newsletter: %w", err) // Internal error
 	}
-	if nl == nil {
-		return nil, ErrServiceNewsletterNotFound
+
+	if newsletter.EditorID != editor.ID {
+		return nil, nil, fmt.Errorf("service: verifyNewsletterOwnership: %w", apperrors.ErrForbidden)
+	}
+	return editor, newsletter, nil
+}
+
+// verifyPostOwnershipAndGetEditor retrieves the editor and post,
+// then verifies that the editor owns the newsletter to which the post belongs.
+// Returns the editor and post if successful.
+func (s *newsletterService) verifyPostOwnershipAndGetEditor(ctx context.Context, editorAuthID string, postID string) (*models.Editor, *models.Post, error) {
+	editor, err := s.editorRepo.GetEditorByFirebaseUID(ctx, editorAuthID) // Assuming editorAuthID is FirebaseUID
+	if err != nil {
+		if errors.Is(err, apperrors.ErrEditorNotFound) {
+			return nil, nil, fmt.Errorf("service: verifyPostOwnership: %w", apperrors.ErrForbidden) // Editor for token not found
+		}
+		return nil, nil, fmt.Errorf("service: verifyPostOwnership: getting editor: %w", err)
+	}
+
+	post, err := s.postRepo.GetPostByID(ctx, postID)
+	if err != nil {
+		if errors.Is(err, apperrors.ErrPostNotFound) {
+			return nil, nil, fmt.Errorf("service: verifyPostOwnership: %w", apperrors.ErrPostNotFound)
+		}
+		return nil, nil, fmt.Errorf("service: verifyPostOwnership: getting post: %w", err)
+	}
+
+	// Now verify ownership of the newsletter the post belongs to
+	_, _, err = s.verifyNewsletterOwnershipAndGetEditor(ctx, editorAuthID, post.NewsletterID)
+	if err != nil {
+		// This will return ErrForbidden if newsletter not owned, or ErrNewsletterNotFound
+		return nil, nil, fmt.Errorf("service: verifyPostOwnership: newsletter ownership check failed: %w", err)
+	}
+
+	return editor, post, nil
+}
+
+// --- Newsletter Methods ---
+
+func (s *newsletterService) ListNewslettersByEditorID(ctx context.Context, editorID string, limit int, offset int) ([]models.Newsletter, int, error) {
+	// Assuming editorID is the authenticated editor's DB ID, validated by the handler/middleware.
+	// No further ownership check needed here for this specific method's logic.
+	if limit <= 0 {
+		limit = 10 // Default limit
+	}
+	if offset < 0 {
+		offset = 0 // Default offset
+	}
+	newsletters, total, err := s.newsletterRepo.ListNewslettersByEditorID(ctx, editorID, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("service: ListNewslettersByEditorID: %w", err) // Wrap internal errors
+	}
+	return newsletters, total, nil
+}
+
+func (s *newsletterService) CreateNewsletter(ctx context.Context, editorID, name, description string) (*models.Newsletter, error) {
+	name = strings.TrimSpace(name)
+	description = strings.TrimSpace(description)
+
+	if name == "" {
+		return nil, fmt.Errorf("service: CreateNewsletter: %w: name cannot be empty", apperrors.ErrValidation)
+	}
+	if len(name) > MaxNewsletterNameLength {
+		return nil, fmt.Errorf("service: CreateNewsletter: %w: name exceeds max length of %d", apperrors.ErrValidation, MaxNewsletterNameLength)
+	}
+	if len(description) > MaxNewsletterDescriptionLength {
+		return nil, fmt.Errorf("service: CreateNewsletter: %w: description exceeds max length of %d", apperrors.ErrValidation, MaxNewsletterDescriptionLength)
+	}
+
+	// Check for name uniqueness for this editor
+	existing, err := s.newsletterRepo.GetNewsletterByNameAndEditorID(ctx, name, editorID)
+	if err != nil && !errors.Is(err, apperrors.ErrNewsletterNotFound) { // If error is something other than "not found"
+		return nil, fmt.Errorf("service: CreateNewsletter: checking name uniqueness: %w", err)
+	}
+	if existing != nil { // Found an existing newsletter with the same name for this editor
+		return nil, fmt.Errorf("service: CreateNewsletter: %w: newsletter name '%s' is already taken", apperrors.ErrConflict, name)
+	}
+	
+	// editorID is assumed to be the authenticated user's actual database ID.
+	return s.newsletterRepo.CreateNewsletter(ctx, editorID, name, description)
+}
+
+func (s *newsletterService) GetNewsletterByID(ctx context.Context, newsletterID string) (*models.Newsletter, error) {
+	nl, err := s.newsletterRepo.GetNewsletterByID(ctx, newsletterID)
+	if err != nil {
+		if errors.Is(err, apperrors.ErrNewsletterNotFound) {
+			return nil, fmt.Errorf("service: GetNewsletterByID: %w", apperrors.ErrNewsletterNotFound)
+		}
+		return nil, fmt.Errorf("service: GetNewsletterByID: %w", err)
 	}
 	return nl, nil
 }
 
+func (s *newsletterService) GetNewsletterForEditor(ctx context.Context, editorAuthID string, newsletterID string) (*models.Newsletter, error) {
+	// editorAuthID is the authenticated editor's unique identifier (e.g., Firebase UID)
+	// newsletterID is the ID of the newsletter to fetch.
+	_, newsletter, err := s.verifyNewsletterOwnershipAndGetEditor(ctx, editorAuthID, newsletterID)
+	if err != nil {
+		return nil, err // verifyNewsletterOwnershipAndGetEditor already wraps errors appropriately
+	}
+	return newsletter, nil
+}
+
+func (s *newsletterService) UpdateNewsletter(ctx context.Context, editorAuthID string, newsletterID string, name *string, description *string) (*models.Newsletter, error) {
+	_, newsletter, err := s.verifyNewsletterOwnershipAndGetEditor(ctx, editorAuthID, newsletterID)
+	if err != nil {
+		return nil, err // Handles ErrForbidden, ErrNewsletterNotFound, or internal errors
+	}
+
+	// Keep original values if not provided for update
+	updatedName := newsletter.Name
+	if name != nil {
+		trimmedName := strings.TrimSpace(*name)
+		if trimmedName == "" {
+			return nil, fmt.Errorf("service: UpdateNewsletter: %w: name cannot be empty if provided", apperrors.ErrValidation)
+		}
+		if len(trimmedName) > MaxNewsletterNameLength {
+			return nil, fmt.Errorf("service: UpdateNewsletter: %w: name exceeds max length of %d", apperrors.ErrValidation, MaxNewsletterNameLength)
+		}
+		// Check for name uniqueness if it's being changed
+		if trimmedName != newsletter.Name {
+			existing, errDb := s.newsletterRepo.GetNewsletterByNameAndEditorID(ctx, trimmedName, newsletter.EditorID)
+			if errDb != nil && !errors.Is(errDb, apperrors.ErrNewsletterNotFound) {
+				return nil, fmt.Errorf("service: UpdateNewsletter: checking name uniqueness: %w", errDb)
+			}
+			if existing != nil { // A newsletter with this new name already exists for this editor
+				return nil, fmt.Errorf("service: UpdateNewsletter: %w: newsletter name '%s' is already taken", apperrors.ErrConflict, trimmedName)
+			}
+		}
+		updatedName = trimmedName
+	}
+
+	updatedDescription := newsletter.Description
+	if description != nil {
+		trimmedDescription := strings.TrimSpace(*description)
+		if len(trimmedDescription) > MaxNewsletterDescriptionLength {
+			return nil, fmt.Errorf("service: UpdateNewsletter: %w: description exceeds max length of %d", apperrors.ErrValidation, MaxNewsletterDescriptionLength)
+		}
+		updatedDescription = trimmedDescription
+	}
+	
+	// Pass name and description pointers to repository.
+	// The repository will handle actual update if values changed.
+	// Here we pass potentially modified values.
+	var namePtr *string
+	if name != nil { // if user intended to update name
+		namePtr = &updatedName
+	}
+	var descPtr *string
+	if description != nil { // if user intended to update description
+		descPtr = &updatedDescription
+	}
+
+	// The editorID for the UpdateNewsletter in repo is the true owner ID (newsletter.EditorID)
+	return s.newsletterRepo.UpdateNewsletter(ctx, newsletterID, newsletter.EditorID, namePtr, descPtr)
+}
+
+func (s *newsletterService) DeleteNewsletter(ctx context.Context, editorAuthID string, newsletterID string) error {
+	_, newsletter, err := s.verifyNewsletterOwnershipAndGetEditor(ctx, editorAuthID, newsletterID)
+	if err != nil {
+		return err // Handles ErrForbidden, ErrNewsletterNotFound, or internal errors
+	}
+
+	// The editorID for the DeleteNewsletter in repo is the true owner ID (newsletter.EditorID)
+	err = s.newsletterRepo.DeleteNewsletter(ctx, newsletterID, newsletter.EditorID)
+	if err != nil {
+		if errors.Is(err, apperrors.ErrNewsletterNotFound) { // Should not happen if verify found it, but as safeguard
+			return fmt.Errorf("service: DeleteNewsletter: %w", apperrors.ErrNewsletterNotFound)
+		}
+		return fmt.Errorf("service: DeleteNewsletter: %w", err)
+	}
+	return nil
+}
 
 // --- Post Methods ---
 
-// checkOwnership verifies if the editor (identified by Firebase UID) owns the newsletter.
-// It returns the editor's database ID (UUID string) if ownership is confirmed, or an error.
-func (s *newsletterService) checkOwnership(ctx context.Context, editorFirebaseUID string, newsletterUUID uuid.UUID) (string, error) {
-	editor, err := s.editorRepo.GetEditorByFirebaseUID(editorFirebaseUID)
+func (s *newsletterService) CreatePost(ctx context.Context, editorAuthID string, newsletterID string, title string, content string) (*models.Post, error) {
+	_, newsletter, err := s.verifyNewsletterOwnershipAndGetEditor(ctx, editorAuthID, newsletterID)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return "", ErrForbidden // Editor not found by Firebase UID
-		}
-		return "", fmt.Errorf("failed to get editor by firebase UID: %w", err)
+		return nil, fmt.Errorf("service: CreatePost: authorization failed: %w", err)
 	}
 
-	newsletter, err := s.newsletterRepo.GetNewsletterByID(newsletterUUID.String())
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return "", ErrServiceNewsletterNotFound
-		}
-		return "", fmt.Errorf("failed to get newsletter: %w", err)
-	}
-	if newsletter == nil { // Should be caught by sql.ErrNoRows above, but as a safeguard
-	    return "", ErrServiceNewsletterNotFound
-	}
-
-
-	if newsletter.EditorID != editor.ID {
-		return "", ErrForbidden // Editor does not own this newsletter
-	}
-	return editor.ID, nil // Ownership confirmed, return editor's DB ID
-}
-
-
-func (s *newsletterService) CreatePost(ctx context.Context, editorFirebaseUID string, newsletterID uuid.UUID, title string, content string) (*models.Post, error) {
-	_, err := s.checkOwnership(ctx, editorFirebaseUID, newsletterID)
-	if err != nil {
-		return nil, err
-	}
+	title = strings.TrimSpace(title)
+	content = strings.TrimSpace(content)
 
 	if title == "" {
-		return nil, ErrPostTitleEmpty
+		return nil, fmt.Errorf("service: CreatePost: %w: title cannot be empty", apperrors.ErrValidation)
 	}
-	if content == "" {
-		return nil, ErrPostContentEmpty
+	if len(title) > MaxPostTitleLength {
+		return nil, fmt.Errorf("service: CreatePost: %w: title exceeds max length of %d", apperrors.ErrValidation, MaxPostTitleLength)
 	}
+	if content == "" { // Consider minimum length as well
+		return nil, fmt.Errorf("service: CreatePost: %w: content cannot be empty", apperrors.ErrValidation)
+	}
+	if len(content) < MinPostContentLength {
+		 return nil, fmt.Errorf("service: CreatePost: %w: content must be at least %d characters", apperrors.ErrValidation, MinPostContentLength)
+	}
+
 
 	post := &models.Post{
-		ID:           uuid.New(), // Repository will use this or DB default
-		NewsletterID: newsletterID,
+		ID:           uuid.NewString(), // Repository expects ID to be set
+		NewsletterID: newsletter.ID,    // Use the verified newsletter's ID
 		Title:        title,
 		Content:      content,
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		// PublishedAt is nil by default (not published)
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
 	}
 
-	createdID, err := s.postRepo.CreatePost(ctx, post)
+	createdPost, err := s.postRepo.CreatePost(ctx, post)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create post: %w", err)
+		// The repository CreatePost now handles specific errors like ForeignKeyViolation
+		// and wraps them, e.g., into apperrors.ErrNotFound if newsletter_id is bad.
+		// Or apperrors.ErrConflict if post ID (if we were to allow client-set IDs) was a duplicate.
+		return nil, fmt.Errorf("service: CreatePost: failed to create post: %w", err)
 	}
-	post.ID = createdID // Ensure the post object has the ID returned by the repo
-
-	// Optionally, re-fetch the post to get all DB-generated fields accurately, though CreatePost should return enough.
-	// For now, we assume the returned ID is sufficient and other fields are as set.
-	return post, nil
+	return createdPost, nil
 }
 
-func (s *newsletterService) GetPostByID(ctx context.Context, postID uuid.UUID) (*models.Post, error) {
+func (s *newsletterService) GetPostByID(ctx context.Context, postID string) (*models.Post, error) {
+	// This is a general get, does not check ownership.
+	// Useful for public access or when ownership is checked by the caller.
 	post, err := s.postRepo.GetPostByID(ctx, postID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get post by ID: %w", err)
-	}
-	if post == nil {
-		return nil, ErrPostNotFound
+		if errors.Is(err, apperrors.ErrPostNotFound) {
+			return nil, fmt.Errorf("service: GetPostByID: %w", apperrors.ErrPostNotFound)
+		}
+		return nil, fmt.Errorf("service: GetPostByID: %w", err)
 	}
 	return post, nil
 }
 
-func (s *newsletterService) ListPostsByNewsletter(ctx context.Context, newsletterID uuid.UUID, limit int, offset int) ([]*models.Post, int, error) {
-	// Future: Add ownership check if only owners can list posts of their newsletters.
-	// For now, assuming public listing or auth handled at API layer.
+func (s *newsletterService) GetPostForEditor(ctx context.Context, editorAuthID string, postID string) (*models.Post, error) {
+	// editorAuthID is the authenticated editor's unique identifier (e.g., Firebase UID)
+	// postID is the ID of the post to fetch.
+	_, post, err := s.verifyPostOwnershipAndGetEditor(ctx, editorAuthID, postID)
+	if err != nil {
+		return nil, err // verifyPostOwnershipAndGetEditor already wraps errors appropriately
+	}
+	return post, nil
+}
+
+
+func (s *newsletterService) ListPostsByNewsletterID(ctx context.Context, newsletterID string, limit int, offset int) ([]models.Post, int, error) {
+	// Optional: could add an ownership check here if only editor can list posts of their newsletter
+	// For now, assuming it can be public or auth is handled by caller based on context.
+	// First, verify newsletter exists.
+	_, err := s.newsletterRepo.GetNewsletterByID(ctx, newsletterID)
+	if err != nil {
+		if errors.Is(err, apperrors.ErrNewsletterNotFound) {
+			return nil, 0, fmt.Errorf("service: ListPostsByNewsletterID: %w", apperrors.ErrNewsletterNotFound)
+		}
+		return nil, 0, fmt.Errorf("service: ListPostsByNewsletterID: checking newsletter: %w", err)
+	}
+
+	if limit <= 0 {
+		limit = 10 // Default limit
+	}
+	if offset < 0 {
+		offset = 0 // Default offset
+	}
+
 	posts, total, err := s.postRepo.ListPostsByNewsletterID(ctx, newsletterID, limit, offset)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to list posts by newsletter: %w", err)
+		return nil, 0, fmt.Errorf("service: ListPostsByNewsletterID: %w", err)
 	}
 	return posts, total, nil
 }
 
-func (s *newsletterService) UpdatePost(ctx context.Context, editorFirebaseUID string, postID uuid.UUID, title *string, content *string) (*models.Post, error) {
-	post, err := s.postRepo.GetPostByID(ctx, postID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get post for update: %w", err)
-	}
-	if post == nil {
-		return nil, ErrPostNotFound
-	}
-
-	_, err = s.checkOwnership(ctx, editorFirebaseUID, post.NewsletterID)
+func (s *newsletterService) UpdatePost(ctx context.Context, editorAuthID string, postID string, title *string, content *string, publishedAtInput *time.Time) (*models.Post, error) {
+	_, post, err := s.verifyPostOwnershipAndGetEditor(ctx, editorAuthID, postID)
 	if err != nil {
 		return nil, err
 	}
 
+	updated := false
 	if title != nil {
-		if *title == "" {
-			return nil, errors.New("post title, if provided, cannot be empty")
+		trimmedTitle := strings.TrimSpace(*title)
+		if trimmedTitle == "" {
+			return nil, fmt.Errorf("service: UpdatePost: %w: title cannot be empty if provided", apperrors.ErrValidation)
 		}
-		post.Title = *title
-	}
-	if content != nil {
-		if *content == "" {
-			return nil, errors.New("post content, if provided, cannot be empty")
+		if len(trimmedTitle) > MaxPostTitleLength {
+			return nil, fmt.Errorf("service: UpdatePost: %w: title exceeds max length of %d", apperrors.ErrValidation, MaxPostTitleLength)
 		}
-		post.Content = *content
+		if post.Title != trimmedTitle {
+			post.Title = trimmedTitle
+			updated = true
+		}
 	}
-	post.UpdatedAt = time.Now()
 
-	err = s.postRepo.UpdatePost(ctx, post)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update post: %w", err)
+	if content != nil {
+		trimmedContent := strings.TrimSpace(*content)
+		if trimmedContent == "" { // Consider minimum length
+			return nil, fmt.Errorf("service: UpdatePost: %w: content cannot be empty if provided", apperrors.ErrValidation)
+		}
+		if len(trimmedContent) < MinPostContentLength {
+			 return nil, fmt.Errorf("service: UpdatePost: %w: content must be at least %d characters", apperrors.ErrValidation, MinPostContentLength)
+		}
+		if post.Content != trimmedContent {
+			post.Content = trimmedContent
+			updated = true
+		}
 	}
-	return post, nil
+	
+	// PublishedAt is handled by PublishPost/UnpublishPost methods now for clarity
+	// This method is for content/title updates. If publishedAtInput is provided, it implies an explicit set/unset
+	// which is complex. Better to use dedicated methods.
+	// For this generic Update, we will *not* modify PublishedAt.
+	// If a service needs to update content AND publish status, it should call UpdatePost then PublishPost.
+
+
+	if !updated && publishedAtInput == nil { // No actual changes to title/content, and not trying to change publishedAt
+		return post, nil // Nothing to update
+	}
+    
+    // If a change occurred, update timestamp
+    if updated {
+	    post.UpdatedAt = time.Now().UTC()
+    }
+
+
+	updatedPost, err := s.postRepo.UpdatePost(ctx, post) // postRepo.UpdatePost updates fields based on the passed post model
+	if err != nil {
+		if errors.Is(err, apperrors.ErrPostNotFound) { // Should not happen if verifyPostOwnership passed
+			return nil, fmt.Errorf("service: UpdatePost: %w", apperrors.ErrPostNotFound)
+		}
+		return nil, fmt.Errorf("service: UpdatePost: failed to update post: %w", err)
+	}
+	return updatedPost, nil
 }
 
-func (s *newsletterService) DeletePost(ctx context.Context, editorFirebaseUID string, postID uuid.UUID) error {
-	post, err := s.postRepo.GetPostByID(ctx, postID)
-	if err != nil {
-		return fmt.Errorf("failed to get post for deletion: %w", err)
-	}
-	if post == nil {
-		return ErrPostNotFound // Or just let DeletePost in repo return sql.ErrNoRows
-	}
-
-	_, err = s.checkOwnership(ctx, editorFirebaseUID, post.NewsletterID)
+func (s *newsletterService) DeletePost(ctx context.Context, editorAuthID string, postID string) error {
+	_, _, err := s.verifyPostOwnershipAndGetEditor(ctx, editorAuthID, postID)
 	if err != nil {
 		return err
 	}
 
 	err = s.postRepo.DeletePost(ctx, postID)
 	if err != nil {
-		if err == sql.ErrNoRows { // Should be caught by GetPostByID above, but as safeguard
-			return ErrPostNotFound
+		if errors.Is(err, apperrors.ErrPostNotFound) {
+			return fmt.Errorf("service: DeletePost: %w", apperrors.ErrPostNotFound)
 		}
-		return fmt.Errorf("failed to delete post: %w", err)
+		return fmt.Errorf("service: DeletePost: %w", err)
 	}
 	return nil
 }
 
-// GetPostForPublishing retrieves a post for publishing, checking ownership and if it's already published.
-func (s *newsletterService) GetPostForPublishing(ctx context.Context, postID uuid.UUID, editorFirebaseUID string) (*models.Post, error) {
-	post, err := s.postRepo.GetPostByID(ctx, postID)
+func (s *newsletterService) PublishPost(ctx context.Context, editorAuthID string, postID string) (*models.Post, error) {
+	_, post, err := s.verifyPostOwnershipAndGetEditor(ctx, editorAuthID, postID)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, ErrPostNotFound
+		return nil, err
+	}
+
+	if post.IsPublished() {
+		return post, nil // Already published, no action needed, return current state
+	}
+
+	now := time.Now().UTC()
+	post.PublishedAt = &now
+	post.UpdatedAt = now
+
+	// Repository's MarkPostAsPublished updates PublishedAt and UpdatedAt
+	// Let's use UpdatePost for consistency as MarkPostAsPublished might be too specific if repo changes
+	updatedPost, err := s.postRepo.UpdatePost(ctx, post)
+	if err != nil {
+		if errors.Is(err, apperrors.ErrPostNotFound) { // Should not happen
+			return nil, fmt.Errorf("service: PublishPost: %w", apperrors.ErrPostNotFound)
 		}
-		return nil, fmt.Errorf("failed to get post for publishing: %w", err)
+		return nil, fmt.Errorf("service: PublishPost: %w", err)
 	}
-	if post == nil { // Should be caught by sql.ErrNoRows
-		return nil, ErrPostNotFound
-	}
-
-	// Check ownership
-	_, err = s.checkOwnership(ctx, editorFirebaseUID, post.NewsletterID)
-	if err != nil {
-		return nil, err // ErrForbidden or other error from checkOwnership
-	}
-
-	// Check if already published
-	if post.PublishedAt != nil && !post.PublishedAt.IsZero() {
-		return nil, errors.New("post is already published")
-	}
-
-	// Ensure all necessary fields are present for publishing
-	if post.Title == "" || post.Content == "" || post.NewsletterID == uuid.Nil {
-		return nil, errors.New("post is missing title, content, or newsletter ID for publishing")
-	}
-	// The `Content` field in `models.Post` is used as `Body` in `PublishingService`. Let's ensure it's consistent.
-	// If `models.Post` has `Content` and `PublishingService` expects `Body`, we need to align.
-	// Assuming `models.Post` has `Content` and `Title` and `NewsletterID`.
-	// The `PublishingService` uses `post.Title` and `post.Body`.
-	// Let's assume `models.Post` has `Content` and we'll use that.
-	// The `PublishingService` will need to use `post.Content` instead of `post.Body`.
-
-	return post, nil
+	return updatedPost, nil
 }
 
-func (s *newsletterService) MarkPostAsPublished(ctx context.Context, editorFirebaseUID string, postID uuid.UUID) error {
-	post, err := s.postRepo.GetPostByID(ctx, postID)
+func (s *newsletterService) UnpublishPost(ctx context.Context, editorAuthID string, postID string) (*models.Post, error) {
+	_, post, err := s.verifyPostOwnershipAndGetEditor(ctx, editorAuthID, postID)
 	if err != nil {
-		return fmt.Errorf("failed to get post for publishing: %w", err)
-	}
-	if post == nil {
-		return ErrPostNotFound
+		return nil, err
 	}
 
-	_, err = s.checkOwnership(ctx, editorFirebaseUID, post.NewsletterID)
-	if err != nil {
-		return err
+	if !post.IsPublished() {
+		return post, nil // Already unpublished, no action needed
 	}
 
-	if post.PublishedAt != nil && !post.PublishedAt.IsZero() {
-		return errors.New("post is already published")
-	}
+	post.PublishedAt = nil // Set to nil to unpublish
+	post.UpdatedAt = time.Now().UTC()
 
-	publishedAtTime := time.Now()
-	err = s.postRepo.MarkPostAsPublished(ctx, postID, publishedAtTime)
+	updatedPost, err := s.postRepo.UpdatePost(ctx, post)
 	if err != nil {
-		if err == sql.ErrNoRows { // Should be caught by GetPostByID, but safeguard
-			return ErrPostNotFound
+		if errors.Is(err, apperrors.ErrPostNotFound) { // Should not happen
+			return nil, fmt.Errorf("service: UnpublishPost: %w", apperrors.ErrPostNotFound)
 		}
-		return fmt.Errorf("failed to mark post as published: %w", err)
+		return nil, fmt.Errorf("service: UnpublishPost: %w", err)
 	}
-	return nil
+	return updatedPost, nil
 }
