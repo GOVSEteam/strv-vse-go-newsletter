@@ -26,7 +26,7 @@ func UpdateHandler(svc service.NewsletterServiceInterface, editorRepo repository
 			return
 		}
 
-		newsletterID := r.PathValue("id") // Requires Go 1.22+ and router pattern like /api/newsletters/{id}
+		newsletterID := r.PathValue("newsletterID") // Requires Go 1.22+ and router pattern like /api/newsletters/{id}
 		if newsletterID == "" {
 			commonHandler.JSONError(w, "Newsletter ID is required in path", http.StatusBadRequest)
 			return

@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-
 type Newsletter struct {
 	ID          string    `json:"id"`
 	EditorID    string    `json:"editor_id"`
@@ -34,26 +33,6 @@ type PostgresNewsletterRepo struct {
 func NewsletterRepo(db *sql.DB) NewsletterRepository {
 	return &PostgresNewsletterRepo{db: db}
 }
-
-
-// ListNewsletters is deprecated, use ListNewslettersByEditorID
-// func (r *PostgresNewsletterRepo) ListNewsletters() ([]Newsletter, error) {
-// 	rows, err := r.db.Query("SELECT id, editor_id, name, description, created_at, updated_at FROM newsletters ORDER BY created_at DESC")
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	defer rows.Close()
-// 
-// 	var newsletters []Newsletter
-// 	for rows.Next() {
-// 		var n Newsletter
-// 		if err := rows.Scan(&n.ID, &n.EditorID, &n.Name, &n.Description, &n.CreatedAt, &n.UpdatedAt); err != nil {
-// 			return nil, err
-// 		}
-// 		newsletters = append(newsletters, n)
-// 	}
-// 	return newsletters, rows.Err()
-// }
 
 // ListNewslettersByEditorID fetches a paginated list of newsletters for a specific editor.
 // It also returns the total count of newsletters for that editor (for pagination metadata).
@@ -116,7 +95,7 @@ func (r *PostgresNewsletterRepo) GetNewsletterByIDAndEditorID(newsletterID strin
 		FROM newsletters 
 		WHERE id = $1 AND editor_id = $2`
 	row := r.db.QueryRow(query, newsletterID, editorID)
-	
+
 	var n Newsletter
 	err := row.Scan(&n.ID, &n.EditorID, &n.Name, &n.Description, &n.CreatedAt, &n.UpdatedAt)
 	if err != nil {
@@ -131,14 +110,6 @@ func (r *PostgresNewsletterRepo) GetNewsletterByIDAndEditorID(newsletterID strin
 // UpdateNewsletter updates a newsletter's name and/or description and its updated_at timestamp.
 // It ensures that the update is performed by the owner.
 func (r *PostgresNewsletterRepo) UpdateNewsletter(newsletterID string, editorID string, name *string, description *string) (*Newsletter, error) {
-	// Build the SET part of the query dynamically based on which fields are provided
-	// This is a bit more complex with pure database/sql.
-	// For simplicity and security (preventing SQL injection if not careful with string building),
-	// we will update both if provided, or keep existing if nil.
-	// A more robust way would be to build the query string or use a query builder.
-
-	// First, fetch the current newsletter to get existing values if not provided for update
-	// and to ensure it exists and belongs to the editor.
 	currentNewsletter, err := r.GetNewsletterByIDAndEditorID(newsletterID, editorID)
 	if err != nil {
 		return nil, err // Error fetching (e.g., DB connection issue)
@@ -157,7 +128,7 @@ func (r *PostgresNewsletterRepo) UpdateNewsletter(newsletterID string, editorID 
 	if description != nil {
 		updatedDescription = *description
 	}
-	
+
 	// Ensure name is not empty if provided for update
 	if name != nil && *name == "" {
 		// This validation should ideally be in the service or handler,
@@ -166,15 +137,14 @@ func (r *PostgresNewsletterRepo) UpdateNewsletter(newsletterID string, editorID 
 		// If name is mandatory for a newsletter, the table schema should reflect that.
 	}
 
-
 	query := `
 		UPDATE newsletters
 		SET name = $1, description = $2, updated_at = NOW()
 		WHERE id = $3 AND editor_id = $4
 		RETURNING id, editor_id, name, description, created_at, updated_at`
-	
+
 	row := r.db.QueryRow(query, updatedName, updatedDescription, newsletterID, editorID)
-	
+
 	var n Newsletter
 	errScan := row.Scan(&n.ID, &n.EditorID, &n.Name, &n.Description, &n.CreatedAt, &n.UpdatedAt)
 	if errScan != nil {
@@ -233,7 +203,7 @@ func (r *PostgresNewsletterRepo) GetNewsletterByID(newsletterID string) (*Newsle
 		FROM newsletters 
 		WHERE id = $1`
 	row := r.db.QueryRow(query, newsletterID)
-	
+
 	var n Newsletter
 	err := row.Scan(&n.ID, &n.EditorID, &n.Name, &n.Description, &n.CreatedAt, &n.UpdatedAt)
 	if err != nil {
