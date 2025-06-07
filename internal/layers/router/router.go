@@ -8,115 +8,90 @@ import (
 	"github.com/go-chi/cors"
 	"go.uber.org/zap"
 
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/editor"
+	editorHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/editor"
 	newsletterHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/newsletter"
 	postHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/post"
 	subscriberHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/subscriber"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/pkg/email" // Added email package
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/setup"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/middleware"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/swaggo/http-swagger"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func Router() http.Handler {
-	r := chi.NewRouter()
+// RouterDependencies holds only essential dependencies for the newsletter service.
+type RouterDependencies struct {
+	DB                *pgxpool.Pool
+	FirebaseAuth      *auth.Client
+	NewsletterService service.NewsletterServiceInterface
+	SubscriberService service.SubscriberServiceInterface
+	PublishingService service.PublishingServiceInterface
+	EditorService     service.EditorServiceInterface
+	PasswordResetSvc  service.PasswordResetService
+	EditorRepo        repository.EditorRepository
+	Logger            *zap.SugaredLogger
+}
 
 // NewRouter creates a simple Chi router for the newsletter service.
 func NewRouter(deps RouterDependencies) *chi.Mux {
 	r := chi.NewRouter()
 
-	editorRepo := repository.EditorRepo(db)
-	editorService := service.NewEditorService(editorRepo)
+	// Essential middleware only
+	r.Use(middleware.LoggingMiddleware(deps.Logger))
+	r.Use(middleware.RecoveryMiddleware(deps.Logger))
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:3000", "https://yourdomain.com"}, // Specific origins
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+		AllowCredentials: true,
+		MaxAge:           300,
+	}))
 
-	newsletterRepo := repository.NewsletterRepo(db)
-	postRepo := repository.NewPostRepository(db)
-	newsletterService := service.NewNewsletterService(newsletterRepo, postRepo, editorRepo)
-
-	var emailSvc email.EmailService
-	var err error
-	if os.Getenv("GOOGLE_APP_PASSWORD") != "" {
-		emailSvc, err = email.NewGmailService()
-		if err != nil {
-			log.Fatalf("Error initializing Gmail email service: %v", err)
+	// Simple health check
+	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		if err := deps.DB.Ping(r.Context()); err != nil {
+			http.Error(w, "Database unavailable", http.StatusServiceUnavailable)
+			return
 		}
-		log.Println("Using Gmail email service")
-	} else {
-		emailSvc = email.NewConsoleEmailService()
-		log.Println("Using Console email service (GOOGLE_APP_PASSWORD not set)")
-	}
-
-	firestoreClient := setup.GetFirestoreClient()
-	if firestoreClient == nil {
-		log.Fatal("Failed to get Firestore client")
-	}
-	subscriberRepo := repository.NewFirestoreSubscriberRepository(firestoreClient)
-	subscriberService := service.NewSubscriberService(subscriberRepo, newsletterRepo, emailSvc)
-	publishingService := service.NewPublishingService(newsletterService, subscriberService, emailSvc)
-
-	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
+		w.Write([]byte("OK"))
 	})
 
-	r.Get("/swagger/*", func(w http.ResponseWriter, r *http.Request) {
-		scheme := "http"
-		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
-			scheme = "https"
-		}
-		host := r.Host
-		specURL := fmt.Sprintf("%s://%s/docs/openapi.yaml", scheme, host)
-		httpSwagger.Handler(httpSwagger.URL(specURL))(w, r)
-	})
+	// API routes
+	r.Route("/api", func(r chi.Router) {
+		// Public routes
+		r.Post("/editor/signup", editorHandler.EditorSignUpHandler(deps.EditorService))
+		r.Post("/editor/signin", editorHandler.EditorSignInHandler(deps.EditorService))
+		r.Post("/editor/password-reset", editorHandler.PasswordResetRequestHandler(deps.PasswordResetSvc))
+		r.Post("/newsletters/{newsletterID}/subscribe", subscriberHandler.SubscribeHandler(deps.SubscriberService))
+		r.Get("/subscriptions/unsubscribe", subscriberHandler.UnsubscribeHandler(deps.SubscriberService))
 
-	r.Get("/docs/*", func(w http.ResponseWriter, r *http.Request) {
-		scheme := "http"
-		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
-			scheme = "https"
-		}
-		host := r.Host
-		specURL := fmt.Sprintf("%s://%s/docs/openapi.yaml", scheme, host)
-		httpSwagger.Handler(httpSwagger.URL(specURL))(w, r)
-	})
+		// Protected routes
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.AuthMiddleware(deps.FirebaseAuth, deps.EditorRepo))
 
-	r.Get("/docs/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/x-yaml")
-		http.ServeFile(w, r, "docs/openapi.yaml")
-	})
+			// Newsletter management
+			r.Route("/newsletters", func(r chi.Router) {
+				r.Get("/", newsletterHandler.ListHandler(deps.NewsletterService))
+				r.Post("/", newsletterHandler.CreateHandler(deps.NewsletterService))
+				r.Get("/{newsletterID}", newsletterHandler.GetByIDHandler(deps.NewsletterService))
+				r.Patch("/{newsletterID}", newsletterHandler.UpdateHandler(deps.NewsletterService))
+				r.Delete("/{newsletterID}", newsletterHandler.DeleteHandler(deps.NewsletterService))
+				r.Get("/{newsletterID}/subscribers", subscriberHandler.ListSubscribersHandler(deps.SubscriberService))
 
-	r.Route("/editor", func(r chi.Router) {
-		r.Post("/signup", editor.EditorSignUpHandler(editorService))
-		r.Post("/signin", editor.EditorSignInHandler(editorService))
-		r.Post("/password-reset-request", editor.FirebasePasswordResetRequestHandler())
-	})
+				// Posts
+				r.Post("/{newsletterID}/posts", postHandler.CreatePostHandler(deps.NewsletterService))
+				r.Get("/{newsletterID}/posts", postHandler.ListPostsByNewsletterHandler(deps.NewsletterService))
+			})
 
-	r.Route("/api/newsletters", func(r chi.Router) {
-		r.Get("/", newsletterHandler.ListHandler(newsletterService, editorRepo))
-		r.Post("/", newsletterHandler.CreateHandler(newsletterService, editorRepo))
-		r.Route("/{newsletterID}", func(r chi.Router) {
-			r.Patch("/", newsletterHandler.UpdateHandler(newsletterService, editorRepo))
-			r.Delete("/", newsletterHandler.DeleteHandler(newsletterService, editorRepo))
-			r.Get("/subscribers", subscriberHandler.GetSubscribersHandler(subscriberService, newsletterRepo, editorRepo))
-			r.Post("/subscribe", subscriberHandler.SubscribeHandler(subscriberService))
-			r.Route("/posts", func(r chi.Router) {
-				r.Get("/", postHandler.ListPostsByNewsletterHandler(newsletterService))
-				r.Post("/", postHandler.CreatePostHandler(newsletterService, editorRepo))
+			// Individual post operations
+			r.Route("/posts/{postID}", func(r chi.Router) {
+				r.Get("/", postHandler.GetPostByIDHandler(deps.NewsletterService))
+				r.Put("/", postHandler.UpdatePostHandler(deps.NewsletterService))
+				r.Delete("/", postHandler.DeletePostHandler(deps.NewsletterService))
+				r.Post("/publish", postHandler.PublishPostHandler(deps.PublishingService))
 			})
 		})
 	})
-
-	r.Route("/api/posts", func(r chi.Router) {
-		r.Route("/{postID}", func(r chi.Router) {
-			r.Get("/", postHandler.GetPostByIDHandler(newsletterService))
-			r.Put("/", postHandler.UpdatePostHandler(newsletterService))
-			r.Delete("/", postHandler.DeletePostHandler(newsletterService))
-			r.Post("/publish", postHandler.PublishPostHandler(publishingService, editorRepo))
-		})
-	})
-
-	r.Get("/api/subscriptions/unsubscribe", subscriberHandler.UnsubscribeHandler(subscriberService))
 
 	return r
 }
