@@ -117,10 +117,56 @@ func getFirebaseServiceAccount() string {
 		}
 	}
 	
-	// Fallback to plain JSON - replace literal \n with actual newlines
+	// Handle plain JSON from environment variable
 	if plainJSON := os.Getenv("FIREBASE_SERVICE_ACCOUNT"); plainJSON != "" {
+		// If the JSON contains actual newlines (multiline), we need to handle it properly
+		// This commonly happens when the environment variable is set from a multiline file
+		if strings.Contains(plainJSON, "\n") {
+			// For multiline JSON, we need to ensure proper JSON escaping
+			// The most common issue is unescaped newlines in the private_key field
+			return fixFirebaseJSONNewlines(plainJSON)
+		}
+		// If it contains literal \n sequences, replace them with actual newlines
 		return strings.ReplaceAll(plainJSON, "\\n", "\n")
 	}
 	
 	return ""
+}
+
+// fixFirebaseJSONNewlines fixes JSON that contains unescaped newlines, particularly
+// in the private_key field of Firebase service account JSON
+func fixFirebaseJSONNewlines(jsonStr string) string {
+	// Use a more robust approach: parse the JSON structure and properly escape the private_key
+	// First, let's try a simple approach - escape all newlines within quoted strings
+	
+	var result strings.Builder
+	inString := false
+	escaped := false
+	
+	for _, char := range jsonStr {
+		switch char {
+		case '"':
+			if !escaped {
+				inString = !inString
+			}
+			result.WriteRune(char)
+			escaped = false
+		case '\\':
+			result.WriteRune(char)
+			escaped = !escaped
+		case '\n':
+			if inString && !escaped {
+				// Replace actual newline with escaped newline in JSON strings
+				result.WriteString("\\n")
+			} else {
+				result.WriteRune(char)
+			}
+			escaped = false
+		default:
+			result.WriteRune(char)
+			escaped = false
+		}
+	}
+	
+	return result.String()
 } 
