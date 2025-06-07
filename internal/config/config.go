@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -116,6 +117,10 @@ func getFirebaseServiceAccount() string {
 		}
 	}
 	
-	// Fallback to plain JSON (may have issues with newlines)
-	return os.Getenv("FIREBASE_SERVICE_ACCOUNT")
+	// Fallback to plain JSON - replace literal \n with actual newlines
+	if plainJSON := os.Getenv("FIREBASE_SERVICE_ACCOUNT"); plainJSON != "" {
+		return strings.ReplaceAll(plainJSON, "\\n", "\n")
+	}
+	
+	return ""
 } 
