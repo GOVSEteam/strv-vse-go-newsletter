@@ -1,65 +1,43 @@
 package newsletter
 
 import (
-	"encoding/json"
 	"net/http"
 
-	"errors"
-
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/auth"
-	commonHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler" // Alias for common handler package
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
+	commonHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/middleware"
 )
 
 type CreateNewsletterRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	Name        string `json:"name" validate:"required,min=2,max=100"`
+	Description string `json:"description" validate:"max=500"`
 }
 
-func CreateHandler(svc service.NewsletterServiceInterface, editorRepo repository.EditorRepository) http.HandlerFunc {
+// CreateHandler handles the creation of new newsletters.
+// It relies on AuthMiddleware to have placed the editor's ID in the context.
+func CreateHandler(svc service.NewsletterServiceInterface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			commonHandler.JSONError(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		firebaseUID, err := auth.VerifyFirebaseJWT(r)
-		if err != nil {
-			commonHandler.JSONError(w, "Invalid or missing token", http.StatusUnauthorized)
-			return
-		}
-
-		editor, err := editorRepo.GetEditorByFirebaseUID(firebaseUID)
-		if err != nil {
-			// Consider if this should be 403 Forbidden or 404 Not Found depending on GetEditorByFirebaseUID behavior
-			commonHandler.JSONError(w, "Editor not found or not authorized", http.StatusForbidden)
+		editorID := middleware.GetEditorIDFromContext(r.Context())
+		if editorID == "" {
+			// This case should ideally be prevented by the AuthMiddleware.
+			// If reached, it implies a middleware configuration issue or bypass.
+			commonHandler.JSONError(w, "Unauthorized: editor ID not found in context", http.StatusUnauthorized)
 			return
 		}
 
 		var req CreateNewsletterRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			commonHandler.JSONError(w, "Invalid request body", http.StatusBadRequest)
-			return
+		if !commonHandler.ValidateAndRespond(w, r, &req) {
+			return // Validation failed, response already sent
 		}
 
-		// Basic validation (more can be added in service layer if needed)
-		if req.Name == "" {
-			commonHandler.JSONError(w, "Newsletter name cannot be empty", http.StatusBadRequest)
-			return
-		}
-
-		newsletter, err := svc.CreateNewsletter(r.Context(), editor.ID, req.Name, req.Description)
+		// The service CreateNewsletter expects editor's database ID.
+		newsletter, err := svc.CreateNewsletter(r.Context(), editorID, req.Name, req.Description)
 		if err != nil {
-			if errors.Is(err, service.ErrNewsletterNameTaken) {
-				commonHandler.JSONError(w, service.ErrNewsletterNameTaken.Error(), http.StatusConflict)
-			} else {
-				// TODO: Differentiate further errors from service (e.g., other validation errors vs. internal errors)
-				commonHandler.JSONError(w, "Failed to create newsletter: "+err.Error(), http.StatusInternalServerError)
-			}
+			commonHandler.JSONErrorSecure(w, err, "newsletter creation")
 			return
 		}
 
+		// Ensure the response is models.Newsletter, which the service now returns.
 		commonHandler.JSONResponse(w, newsletter, http.StatusCreated)
 	}
 }

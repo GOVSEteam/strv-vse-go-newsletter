@@ -1,41 +1,38 @@
 package editor
 
 import (
-	"encoding/json"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
 	"net/http"
+
+	commonHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
 )
 
 type signUpRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,min=6,max=100"`
 }
 
 type signUpResponse struct {
 	EditorID string `json:"editor_id"`
 	Email    string `json:"email"`
+	// Could also include CreatedAt from models.Editor if desired
 }
 
-func EditorSignUpHandler(svc service.EditorService) http.HandlerFunc {
+// EditorSignUpHandler handles new editor registration.
+func EditorSignUpHandler(svc service.EditorServiceInterface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
 		var req signUpRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Email == "" || req.Password == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			return
+		if !commonHandler.ValidateAndRespond(w, r, &req) {
+			return // Validation failed, response already sent
 		}
-		editor, err := svc.SignUp(req.Email, req.Password)
+
+		editor, err := svc.SignUp(r.Context(), req.Email, req.Password)
 		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			commonHandler.JSONErrorSecure(w, err, "editor signup")
 			return
 		}
+
 		resp := signUpResponse{EditorID: editor.ID, Email: editor.Email}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(resp)
+		commonHandler.JSONResponse(w, resp, http.StatusCreated)
 	}
 }

@@ -4,11 +4,12 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/auth"
-	globalHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler"
+	"github.com/go-chi/chi/v5"
+
+	commonHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/middleware"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models" // For models.Post
-	"github.com/google/uuid"
 )
 
 const (
@@ -18,44 +19,36 @@ const (
 )
 
 type PaginatedPostsResponse struct {
-	Data   []*models.Post `json:"data"`
-	Total  int            `json:"total"`
-	Limit  int            `json:"limit"`
-	Offset int            `json:"offset"`
+	Data   []models.Post `json:"data"`
+	Total  int           `json:"total"`
+	Limit  int           `json:"limit"`
+	Offset int           `json:"offset"`
 }
 
 func ListPostsByNewsletterHandler(svc service.NewsletterServiceInterface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			globalHandler.JSONError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		// Ensure editor is authenticated, although not directly used by ListPostsByNewsletterID, it's good practice for grouped routes
+		editorID := middleware.GetEditorIDFromContext(r.Context())
+		if editorID == "" {
+			commonHandler.JSONError(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
-		// TODO: Replace with auth middleware (if listing posts is protected)
-		// For now, let's assume it's protected as per API-POST-001
-		_, err := auth.VerifyFirebaseJWT(r)
-		if err != nil {
-			globalHandler.JSONError(w, "Invalid or missing token: "+err.Error(), http.StatusUnauthorized)
-			return
-		}
-
-		newsletterIDStr := r.PathValue("newsletterID")
+		newsletterIDStr := chi.URLParam(r, "newsletterID")
 		if newsletterIDStr == "" {
-			globalHandler.JSONError(w, "Newsletter ID is required in path", http.StatusBadRequest)
+			commonHandler.JSONError(w, "Newsletter ID is required in path", http.StatusBadRequest)
 			return
 		}
-		newsletterID, err := uuid.Parse(newsletterIDStr)
-		if err != nil {
-			globalHandler.JSONError(w, "Invalid newsletter ID format", http.StatusBadRequest)
-			return
-		}
+
+		// Validation of newsletterID format (UUID) is implicitly handled by service/repository layer if it attempts to parse/use it.
+		// No need to parse to uuid.UUID here if the service layer expects a string and handles validation.
 
 		limitStr := r.URL.Query().Get("limit")
 		limit := DefaultPostLimit
 		if limitStr != "" {
 			parsedLimit, err := strconv.Atoi(limitStr)
 			if err != nil || parsedLimit <= 0 {
-				globalHandler.JSONError(w, "Invalid limit parameter", http.StatusBadRequest)
+				commonHandler.JSONError(w, "Invalid limit parameter", http.StatusBadRequest)
 				return
 			}
 			limit = parsedLimit
@@ -69,16 +62,15 @@ func ListPostsByNewsletterHandler(svc service.NewsletterServiceInterface) http.H
 		if offsetStr != "" {
 			parsedOffset, err := strconv.Atoi(offsetStr)
 			if err != nil || parsedOffset < 0 {
-				globalHandler.JSONError(w, "Invalid offset parameter", http.StatusBadRequest)
+				commonHandler.JSONError(w, "Invalid offset parameter", http.StatusBadRequest)
 				return
 			}
 			offset = parsedOffset
 		}
 
-		posts, total, err := svc.ListPostsByNewsletter(r.Context(), newsletterID, limit, offset)
+		posts, total, err := svc.ListPostsByNewsletterID(r.Context(), newsletterIDStr, limit, offset)
 		if err != nil {
-			// Consider specific errors like service.ErrServiceNewsletterNotFound if the newsletter itself doesn't exist
-			globalHandler.JSONError(w, "Failed to list posts: "+err.Error(), http.StatusInternalServerError)
+			commonHandler.JSONErrorSecure(w, err, "post list")
 			return
 		}
 
@@ -88,6 +80,6 @@ func ListPostsByNewsletterHandler(svc service.NewsletterServiceInterface) http.H
 			Limit:  limit,
 			Offset: offset,
 		}
-		globalHandler.JSONResponse(w, response, http.StatusOK)
+		commonHandler.JSONResponse(w, response, http.StatusOK)
 	}
 }

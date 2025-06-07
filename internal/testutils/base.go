@@ -1,21 +1,21 @@
 package testutils
 
 import (
-	"database/sql"
 	"testing"
 
 	"cloud.google.com/go/firestore"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/config"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type TestSuite struct {
-	DB        *sql.DB
+	DB        *pgxpool.Pool
 	Firestore *firestore.Client
-	Config    *TestConfig
+	Config    *config.Config
 }
 
 func NewTestSuite(t *testing.T) *TestSuite {
-	config := LoadTestConfig(t)
-	config.Validate(t)
+	cfg := LoadTestConfig(t)
 
 	db := SetupTestDB(t)
 	firestore := SetupTestFirestore(t)
@@ -26,7 +26,7 @@ func NewTestSuite(t *testing.T) *TestSuite {
 	return &TestSuite{
 		DB:        db,
 		Firestore: firestore,
-		Config:    config,
+		Config:    cfg,
 	}
 }
 

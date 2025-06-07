@@ -1,44 +1,39 @@
 package testutils
 
 import (
-	"database/sql"
-	"os"
+	"context"
 	"testing"
 
-	"github.com/joho/godotenv"
-	_ "github.com/lib/pq"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/config"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func SetupTestDB(t *testing.T) *sql.DB {
-	// Load environment variables
-	if err := godotenv.Load("../../.env"); err != nil {
-		t.Logf("Warning: .env file not found")
+func SetupTestDB(t *testing.T) *pgxpool.Pool {
+	// Load configuration using centralized config system
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Failed to load test configuration: %v", err)
 	}
 
-	// For local testing, prefer DATABASE_PUBLIC_URL over DATABASE_URL
-	// since DATABASE_URL often contains internal hostnames not accessible locally
-	dbURL := os.Getenv("DATABASE_PUBLIC_URL")
+	// Use the same database URL resolution logic as the main application
+	dbURL := cfg.GetDatabaseURL()
 	if dbURL == "" {
-		dbURL = os.Getenv("DATABASE_URL")
-	}
-	
-	if dbURL == "" {
-		t.Fatal("DATABASE_URL or DATABASE_PUBLIC_URL environment variable is required for tests")
+		t.Fatal("DATABASE_URL is required for tests but not configured")
 	}
 
-	db, err := sql.Open("postgres", dbURL)
+	pool, err := pgxpool.New(context.Background(), dbURL)
 	if err != nil {
 		t.Fatalf("Failed to connect to test database: %v", err)
 	}
 
-	if err := db.Ping(); err != nil {
+	if err := pool.Ping(context.Background()); err != nil {
 		t.Fatalf("Failed to ping test database: %v", err)
 	}
 
-	return db
+	return pool
 }
 
-func CleanupTestData(t *testing.T, db *sql.DB) {
+func CleanupTestData(t *testing.T, pool *pgxpool.Pool) {
 	// Clean up in reverse dependency order to avoid foreign key constraint violations
 	queries := []string{
 		// First, clean up posts (depends on newsletters)
@@ -52,7 +47,7 @@ func CleanupTestData(t *testing.T, db *sql.DB) {
 	}
 
 	for _, query := range queries {
-		if _, err := db.Exec(query); err != nil {
+		if _, err := pool.Exec(context.Background(), query); err != nil {
 			t.Logf("Warning: Failed to cleanup with query %s: %v", query, err)
 		}
 	}

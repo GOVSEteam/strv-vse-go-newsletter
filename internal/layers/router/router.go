@@ -1,15 +1,16 @@
 package router
 
 import (
-	"fmt"
 	"net/http"
 
-	"log"
-	"os"
+	"firebase.google.com/go/v4/auth"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/cors"
+	"go.uber.org/zap"
 
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/editor"
-	newsletterHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/newsletter" // Import specific newsletter handlers
-	postHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/post"             // Import post handlers
+	newsletterHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/newsletter"
+	postHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/post"
 	subscriberHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/subscriber"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
@@ -23,7 +24,9 @@ import (
 func Router() http.Handler {
 	r := chi.NewRouter()
 
-	db := setup.ConnectDB()
+// NewRouter creates a simple Chi router for the newsletter service.
+func NewRouter(deps RouterDependencies) *chi.Mux {
+	r := chi.NewRouter()
 
 	editorRepo := repository.EditorRepo(db)
 	editorService := service.NewEditorService(editorRepo)

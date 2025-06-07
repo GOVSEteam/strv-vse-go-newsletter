@@ -1,17 +1,17 @@
 package newsletter
 
 import (
-	"database/sql"
-	"errors"
 	"net/http"
 
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/auth"
 	commonHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/middleware"
+	"github.com/go-chi/chi/v5"
 )
 
-func DeleteHandler(svc service.NewsletterServiceInterface, editorRepo repository.EditorRepository) http.HandlerFunc {
+// DeleteHandler handles the deletion of a newsletter.
+// It relies on AuthMiddleware for authentication and extracting the editor's ID.
+func DeleteHandler(svc service.NewsletterServiceInterface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodDelete {
 			commonHandler.JSONError(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -20,30 +20,24 @@ func DeleteHandler(svc service.NewsletterServiceInterface, editorRepo repository
 
 		newsletterID := r.PathValue("newsletterID") // Requires Go 1.22+ and router pattern like /api/newsletters/{id}
 		if newsletterID == "" {
+			// This should ideally be caught by a route validation or a more specific check
+			// if the router doesn't guarantee a non-empty {id}.
 			commonHandler.JSONError(w, "Newsletter ID is required in path", http.StatusBadRequest)
 			return
 		}
 
-		firebaseUID, err := auth.VerifyFirebaseJWT(r)
-		if err != nil {
-			commonHandler.JSONError(w, "Invalid or missing token", http.StatusUnauthorized)
+		editorAuthID := middleware.GetEditorIDFromContext(r.Context())
+		if editorAuthID == "" {
+			// This case should ideally be prevented by the AuthMiddleware.
+			commonHandler.JSONError(w, "Unauthorized: editor ID not found in context", http.StatusUnauthorized)
 			return
 		}
 
-		editor, err := editorRepo.GetEditorByFirebaseUID(firebaseUID)
+		// The service method DeleteNewsletter expects the editor's Firebase UID (or general auth ID)
+		// and the newsletter ID.
+		err := svc.DeleteNewsletter(r.Context(), editorAuthID, newsletterID)
 		if err != nil {
-			commonHandler.JSONError(w, "Editor not found or not authorized", http.StatusForbidden)
-			return
-		}
-
-		err = svc.DeleteNewsletter(r.Context(), newsletterID, editor.ID)
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				commonHandler.JSONError(w, "Newsletter not found or you don't have permission to delete it", http.StatusNotFound) // Or StatusForbidden
-			} else {
-				// log.Printf("Error deleting newsletter %s: %v", newsletterID, err)
-				commonHandler.JSONError(w, "Failed to delete newsletter: "+err.Error(), http.StatusInternalServerError)
-			}
+			commonHandler.JSONErrorSecure(w, err, "newsletter delete")
 			return
 		}
 

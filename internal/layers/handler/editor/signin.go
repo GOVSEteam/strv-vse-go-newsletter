@@ -1,35 +1,36 @@
 package editor
 
 import (
-	"encoding/json"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
 	"net/http"
+
+	commonHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
 )
 
 type signInRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required"`
 }
 
-func EditorSignInHandler(svc service.EditorService) http.HandlerFunc {
+type signInResponse struct {
+	Token string `json:"token"`
+}
+
+// EditorSignInHandler handles editor authentication.
+func EditorSignInHandler(svc service.EditorServiceInterface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
 		var req signInRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Email == "" || req.Password == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			return
+		if !commonHandler.ValidateAndRespond(w, r, &req) {
+			return // Validation failed, response already sent
 		}
-		resp, err := svc.SignIn(req.Email, req.Password)
+
+		signInResp, err := svc.SignIn(r.Context(), req.Email, req.Password)
 		if err != nil {
-			w.WriteHeader(http.StatusUnauthorized)
-			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			commonHandler.JSONErrorSecure(w, err, "editor signin")
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(resp)
+
+		resp := signInResponse{Token: signInResp.IDToken}
+		commonHandler.JSONResponse(w, resp, http.StatusOK)
 	}
 }

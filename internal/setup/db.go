@@ -1,27 +1,41 @@
 package setup
 
 import (
-	"database/sql"
-	_ "github.com/lib/pq"
-	"log"
-	"os"
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// ConnectDB returns a connected *sql.DB using env vars for config
-func ConnectDB() *sql.DB {
-	dbURL := os.Getenv("DATABASE_URL")
-	if os.Getenv("RAILWAY_ENVIRONMENT") == "" {
-		if publicURL := os.Getenv("DATABASE_PUBLIC_URL"); publicURL != "" {
-			dbURL = publicURL
-		}
+// ConnectDB establishes a connection pool to the PostgreSQL database using pgx/v5.
+// It uses sensible defaults appropriate for a newsletter service.
+func ConnectDB(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
+	if databaseURL == "" {
+		return nil, fmt.Errorf("database URL is required")
 	}
 
-	db, err := sql.Open("postgres", dbURL)
+	config, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
-		log.Fatalf("failed to connect to database: %v", err)
+		return nil, fmt.Errorf("failed to parse database URL: %w", err)
 	}
-	if err := db.Ping(); err != nil {
-		log.Fatalf("failed to ping database: %v", err)
+
+	// Set reasonable defaults for newsletter service
+	config.MaxConns = 25
+	config.MinConns = 5
+	config.MaxConnLifetime = time.Hour
+	config.MaxConnIdleTime = 30 * time.Minute
+
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create connection pool: %w", err)
 	}
-	return db
+
+	// Simple connectivity test
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("failed to ping database: %w", err)
+	}
+
+	return pool, nil
 }

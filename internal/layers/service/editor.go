@@ -4,14 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"firebase.google.com/go/v4/auth"
 	"fmt"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/setup"
 	"net/http"
-	"os"
+
+	"firebase.google.com/go/v4/auth"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models"
 )
 
+// SignInResponse represents the response from Firebase sign-in
 type SignInResponse struct {
 	IDToken      string `json:"idToken"`
 	RefreshToken string `json:"refreshToken"`
@@ -19,54 +20,92 @@ type SignInResponse struct {
 	LocalID      string `json:"localId"`
 }
 
-type EditorService interface {
-	SignUp(email, password string) (*repository.Editor, error)
-	SignIn(email, password string) (*SignInResponse, error)
+// EditorServiceInterface defines the interface for editor operations
+type EditorServiceInterface interface {
+	SignUp(ctx context.Context, email, password string) (*models.Editor, error)
+	SignIn(ctx context.Context, email, password string) (*SignInResponse, error)
 }
 
+// editorService implements EditorServiceInterface
 type editorService struct {
-	repo repository.EditorRepository
+	repo               repository.EditorRepository
+	authClient         FirebaseAuthClient
+	httpClient         *http.Client
+	firebaseAPIKey     string
+	firebaseSignInURL  string
 }
 
-func NewEditorService(repo repository.EditorRepository) EditorService {
-	return &editorService{repo: repo}
+// NewEditorService creates a new editor service
+func NewEditorService(
+	repo repository.EditorRepository,
+	authClient FirebaseAuthClient,
+	httpClient *http.Client,
+	firebaseAPIKey string,
+) EditorServiceInterface {
+	return &editorService{
+		repo:               repo,
+		authClient:         authClient,
+		httpClient:         httpClient,
+		firebaseAPIKey:     firebaseAPIKey,
+		firebaseSignInURL:  fmt.Sprintf("https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=%s", firebaseAPIKey),
+	}
 }
 
-func (s *editorService) SignUp(email, password string) (*repository.Editor, error) {
-	client := setup.GetAuthClient()
-	params := (&auth.UserToCreate{}).Email(email).Password(password)
-	user, err := client.CreateUser(context.Background(), params)
+// SignUp creates a new editor account
+func (s *editorService) SignUp(ctx context.Context, email, password string) (*models.Editor, error) {
+	// Create user in Firebase Auth
+	userToCreate := &auth.UserToCreate{}
+	userToCreate.Email(email)
+	userToCreate.Password(password)
+
+	firebaseUser, err := s.authClient.CreateUser(ctx, userToCreate)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create Firebase user: %w", err)
 	}
-	return s.repo.InsertEditor(user.UID, email)
+
+	// Create editor record in database
+	editor, err := s.repo.InsertEditor(ctx, firebaseUser.UID, email)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create editor in database: %w", err)
+	}
+
+	return editor, nil
 }
 
-func (s *editorService) SignIn(email, password string) (*SignInResponse, error) {
-	apiKey := os.Getenv("FIREBASE_API_KEY")
-	if apiKey == "" {
-		return nil, fmt.Errorf("FIREBASE_API_KEY env var not set")
-	}
-	url := fmt.Sprintf("https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=%s", apiKey)
+// SignIn authenticates an editor and returns Firebase tokens
+func (s *editorService) SignIn(ctx context.Context, email, password string) (*SignInResponse, error) {
 	payload := map[string]interface{}{
 		"email":             email,
 		"password":          password,
 		"returnSecureToken": true,
 	}
-	body, _ := json.Marshal(payload)
-	resp, err := http.Post(url, "application/json", bytes.NewBuffer(body))
+
+	jsonPayload, err := json.Marshal(payload)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal sign-in payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", s.firebaseSignInURL, bytes.NewBuffer(jsonPayload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create sign-in request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign in: %w", err)
 	}
 	defer resp.Body.Close()
+
 	if resp.StatusCode != http.StatusOK {
-		var errResp map[string]interface{}
-		_ = json.NewDecoder(resp.Body).Decode(&errResp)
-		return nil, fmt.Errorf("auth sign-in failed: %v", errResp)
+		return nil, fmt.Errorf("sign-in failed with status: %d", resp.StatusCode)
 	}
-	var out SignInResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return nil, err
+
+	var signInResp SignInResponse
+	if err := json.NewDecoder(resp.Body).Decode(&signInResp); err != nil {
+		return nil, fmt.Errorf("failed to decode sign-in response: %w", err)
 	}
-	return &out, nil
-}
+
+	return &signInResp, nil
+} 
