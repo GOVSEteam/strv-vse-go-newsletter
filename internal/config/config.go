@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -119,15 +120,34 @@ func getFirebaseServiceAccount() string {
 	
 	// Handle plain JSON from environment variable
 	if plainJSON := os.Getenv("FIREBASE_SERVICE_ACCOUNT"); plainJSON != "" {
-		// If the JSON contains actual newlines (multiline), we need to handle it properly
-		// This commonly happens when the environment variable is set from a multiline file
-		if strings.Contains(plainJSON, "\n") {
-			// For multiline JSON, we need to ensure proper JSON escaping
-			// The most common issue is unescaped newlines in the private_key field
-			return fixFirebaseJSONNewlines(plainJSON)
+		// First, try to parse the JSON as-is to see if it's already valid
+		var testParse map[string]interface{}
+		if err := json.Unmarshal([]byte(plainJSON), &testParse); err == nil {
+			// JSON is already valid, return as-is
+			return plainJSON
 		}
-		// If it contains literal \n sequences, replace them with actual newlines
-		return strings.ReplaceAll(plainJSON, "\\n", "\n")
+		
+		// JSON is invalid, check if it contains actual newlines that need escaping
+		if strings.Contains(plainJSON, "\n") {
+			// Try to fix unescaped newlines in JSON strings
+			fixed := fixFirebaseJSONNewlines(plainJSON)
+			// Verify the fix worked
+			if err := json.Unmarshal([]byte(fixed), &testParse); err == nil {
+				return fixed
+			}
+		}
+		
+		// If it contains literal \n sequences, try converting them to actual newlines
+		if strings.Contains(plainJSON, "\\n") {
+			converted := strings.ReplaceAll(plainJSON, "\\n", "\n")
+			// Check if this creates valid JSON
+			if err := json.Unmarshal([]byte(converted), &testParse); err == nil {
+				return converted
+			}
+		}
+		
+		// Return the original if nothing worked
+		return plainJSON
 	}
 	
 	return ""
@@ -136,28 +156,47 @@ func getFirebaseServiceAccount() string {
 // fixFirebaseJSONNewlines fixes JSON that contains unescaped newlines, particularly
 // in the private_key field of Firebase service account JSON
 func fixFirebaseJSONNewlines(jsonStr string) string {
-	// Use a more robust approach: parse the JSON structure and properly escape the private_key
-	// First, let's try a simple approach - escape all newlines within quoted strings
-	
+	// More robust approach: properly escape newlines only within JSON string values
 	var result strings.Builder
 	inString := false
 	escaped := false
 	
 	for _, char := range jsonStr {
 		switch char {
+		case '\\':
+			result.WriteRune(char)
+			// Toggle escaped state only if we're in a string
+			if inString {
+				escaped = !escaped
+			}
 		case '"':
 			if !escaped {
 				inString = !inString
 			}
 			result.WriteRune(char)
 			escaped = false
-		case '\\':
-			result.WriteRune(char)
-			escaped = !escaped
 		case '\n':
 			if inString && !escaped {
-				// Replace actual newline with escaped newline in JSON strings
+				// We're inside a JSON string and this is an unescaped newline
+				// Replace it with the escaped version
 				result.WriteString("\\n")
+			} else {
+				// We're outside a string or it's already escaped, keep as is
+				result.WriteRune(char)
+			}
+			escaped = false
+		case '\r':
+			if inString && !escaped {
+				// Also handle carriage returns
+				result.WriteString("\\r")
+			} else {
+				result.WriteRune(char)
+			}
+			escaped = false
+		case '\t':
+			if inString && !escaped {
+				// Also handle tabs
+				result.WriteString("\\t")
 			} else {
 				result.WriteRune(char)
 			}
