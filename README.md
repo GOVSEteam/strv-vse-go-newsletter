@@ -8,8 +8,6 @@
 
 API backend for the STRV Semestral Project - Go Newsletter Platform.
 
-<!-- Last updated: 2025-01-26 - Firebase newline fix deployed -->
-
 ## Overview
 
 This service provides API endpoints for:
