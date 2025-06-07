@@ -1,12 +1,13 @@
 package models
 
 import (
-	"errors"
+	"strings"
 	"time"
+
+	apperrors "github.com/GOVSEteam/strv-vse-go-newsletter/internal/errors"
 )
 
-// Post represents the domain model for a blog post within a newsletter.
-// It contains no database or persistence-specific tags.
+// Post represents the domain model for a blog post within a newsletter
 type Post struct {
 	ID           string     `json:"id"`
 	NewsletterID string     `json:"newsletterId"`
@@ -17,39 +18,28 @@ type Post struct {
 	UpdatedAt    time.Time  `json:"updatedAt"`
 }
 
-const (
-	MaxPostTitleLength   = 255
-	MaxPostContentLength = 65535 // Roughly a TEXT type limit
-)
-
-// Validate performs basic validation on the Post fields.
+// Validate performs basic business validation on the Post fields
 func (p *Post) Validate() error {
-	if p.ID == "" {
-		return errors.New("post ID is required")
+	if strings.TrimSpace(p.ID) == "" {
+		return apperrors.WrapValidation(nil, "post ID is required")
 	}
-	if p.NewsletterID == "" {
-		return errors.New("post newsletter ID is required")
+	
+	if strings.TrimSpace(p.NewsletterID) == "" {
+		return apperrors.WrapValidation(nil, "post newsletter ID is required")
 	}
-	if p.Title == "" {
-		return errors.New("post title is required")
+	
+	if strings.TrimSpace(p.Title) == "" {
+		return apperrors.WrapValidation(nil, "post title is required")
 	}
-	if len(p.Title) > MaxPostTitleLength {
-		return errors.New("post title exceeds maximum length")
+	
+	if strings.TrimSpace(p.Content) == "" {
+		return apperrors.WrapValidation(nil, "post content is required")
 	}
-	if p.Content == "" {
-		return errors.New("post content is required")
-	}
-	if len(p.Content) > MaxPostContentLength {
-		return errors.New("post content exceeds maximum length")
-	}
-	// Add other validation rules as needed
+	
 	return nil
 }
 
-// IsPublished checks if the post is considered published.
-// A post is published if PublishedAt is not nil and the time is not in the future.
-// For simplicity here, we just check if PublishedAt is not nil.
-// Business logic could choose to check if PublishedAt.After(time.Now()) for scheduled posts.
+// IsPublished checks if the post has a publication timestamp set
 func (p *Post) IsPublished() bool {
 	return p.PublishedAt != nil
 }

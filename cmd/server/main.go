@@ -1,23 +1,4 @@
-// Newsletter API
-//
-// A comprehensive API for managing newsletters, posts, and subscribers
-//
-//	Title: Newsletter API
-//	Description: A comprehensive API for managing newsletters, posts, and subscribers
-//	Version: 1.0.0
-//	Host: localhost:8080 // Will be replaced by config.AppBaseURL
-//	BasePath: /
-//	Schemes: http, https
-//
-//	SecurityDefinitions:
-//	  BearerAuth:
-//	    type: apiKey
-//	    in: header
-//	    name: Authorization
-//	    description: Firebase JWT token (add 'Bearer ' prefix)
-//
-// @contact.name Newsletter API Support
-// @contact.email support@newsletter-api.com
+// Newsletter API - A comprehensive API for managing newsletters, posts, and subscribers
 package main
 
 import (
@@ -35,14 +16,10 @@ import (
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/router"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/setup"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/worker"
 
-	_ "github.com/joho/godotenv/autoload" // Autoload .env file
+	_ "github.com/joho/godotenv/autoload"
 	"go.uber.org/zap"
-	// "github.com/jackc/pgx/v5/pgxpool" // Placeholder for pgxpool
 )
-
-var _ = setup.ConnectDB // Dummy use of setup package until its functions are fully integrated
 
 func main() {
 	// Load configuration
@@ -51,129 +28,97 @@ func main() {
 		log.Fatalf("Error loading configuration: %v", err)
 	}
 
-	// Initialize structured logger
+	// Initialize logger
 	logger, err := zap.NewProduction()
 	if err != nil {
 		log.Fatalf("Error initializing logger: %v", err)
 	}
-	defer logger.Sync() // Flushes buffer, if any
+	defer logger.Sync()
 	sugar := logger.Sugar()
-	sugar.Info("Logger initialized")
-	sugar.Infof("Application configuration loaded: %+v", cfg)
 
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	sugar.Infof("Main context created: %v (used for graceful shutdown and DI)", ctx)
 
 	// Initialize Database Connection
-	sugar.Info("Initializing database connection...")
 	dbPool, err := setup.ConnectDB(ctx, cfg.GetDatabaseURL())
 	if err != nil {
 		sugar.Fatalf("Error connecting to database: %v", err)
 	}
-	sugar.Info("Database connection established")
-	defer func() {
-		sugar.Info("Closing database connection pool...")
-		if dbPool != nil {
-			dbPool.Close()
-		}
-		sugar.Info("Database connection pool closed.")
-	}()
+	defer dbPool.Close()
 
 	// Initialize Firebase
-	sugar.Info("Initializing Firebase app...")
 	firebaseApp, err := setup.NewFirebaseApp(ctx, cfg.FirebaseServiceAccount)
 	if err != nil {
 		sugar.Fatalf("Error initializing Firebase app: %v", err)
 	}
-	sugar.Info("Firebase app initialized")
 
 	firebaseAuthClient, err := setup.NewAuthClient(ctx, firebaseApp)
 	if err != nil {
 		sugar.Fatalf("Error initializing Firebase Auth client: %v", err)
 	}
-	sugar.Info("Firebase Auth client initialized")
 
 	firestoreClient, err := setup.NewFirestoreClient(ctx, firebaseApp)
 	if err != nil {
 		sugar.Fatalf("Error initializing Firestore client: %v", err)
 	}
-	sugar.Info("Firestore client initialized")
 	defer func() {
-		sugar.Info("Closing Firestore client...")
 		if firestoreClient != nil {
-			if err := firestoreClient.Close(); err != nil {
-				sugar.Errorf("Error closing Firestore client: %v", err)
-			} else {
-				sugar.Info("Firestore client closed.")
-			}
+			firestoreClient.Close()
 		}
 	}()
 
 	// Initialize Repositories
-	sugar.Info("Initializing repositories...")
-	editorRepo := repository.EditorRepo(dbPool)
-	newsletterRepo := repository.NewsletterRepo(dbPool)
+	editorRepo := repository.NewPostgresEditorRepo(dbPool)
+	newsletterRepo := repository.NewPostgresNewsletterRepo(dbPool)
 	postRepo := repository.NewPostRepository(dbPool)
 	subscriberRepo := repository.NewFirestoreSubscriberRepository(firestoreClient)
-	sugar.Info("Repositories initialized")
 
-	// Initialize Email Service and Worker
-	sugar.Info("Initializing email service and worker...")
+	// Initialize Email Service (direct sending)
 	emailServiceConfig := service.GmailEmailServiceConfig{
 		From:     cfg.EmailFrom,
 		Password: cfg.GoogleAppPassword,
-		SMTPHost: "smtp.gmail.com", // Default, consider adding to config.Config
-		SMTPPort: "587",            // Default, consider adding to config.Config
+		SMTPHost: cfg.SMTPHost,
+		SMTPPort: cfg.SMTPPort,
 	}
 	emailService, err := service.NewGmailEmailService(emailServiceConfig, zap.NewStdLog(logger))
 	if err != nil {
 		sugar.Fatalf("Error initializing email service: %v", err)
 	}
-	emailWorker := worker.NewEmailWorker(emailService, 100) // emailWorker is the EmailJobQueuer
-	go emailWorker.Start(ctx, 5)
-	sugar.Info("Email service and worker initialized")
 
 	// Initialize Services
-	sugar.Info("Initializing services...")
 	firebasePasswordResetConfig := service.FirebasePasswordResetServiceConfig{
 		APIKey:     cfg.FirebaseAPIKey,
 		HTTPClient: &http.Client{Timeout: 10 * time.Second},
 		Logger:     zap.NewStdLog(logger),
 	}
-	passwordResetSvc, err := service.NewFirebasePasswordResetService(firebasePasswordResetConfig) // Renamed from authSvc to match router
+	passwordResetSvc, err := service.NewFirebasePasswordResetService(firebasePasswordResetConfig)
 	if err != nil {
 		sugar.Fatalf("Error initializing password reset service: %v", err)
 	}
 	editorSvc := service.NewEditorService(editorRepo, firebaseAuthClient, &http.Client{Timeout: 10 * time.Second}, cfg.FirebaseAPIKey)
 	newsletterSvc := service.NewNewsletterService(newsletterRepo, postRepo, editorRepo)
 	subscriberSvc := service.NewSubscriberService(subscriberRepo, newsletterRepo, editorRepo, emailService, cfg.AppBaseURL)
-	publishingSvc := service.NewPublishingService(newsletterSvc, subscriberSvc, emailWorker) // Added PublishingService
-	sugar.Info("Services initialized")
+	publishingSvc := service.NewPublishingService(newsletterSvc, subscriberSvc, emailService, cfg)
 
-	// Initialize Chi Router
-	sugar.Info("Initializing Chi router...")
+	// Initialize Router
 	routerDeps := router.RouterDependencies{
-		DB:                  dbPool, // The router expects *sql.DB, but we have *pgxpool.Pool. This needs to be addressed.
-		FirestoreClient:     firestoreClient,
-		FirebaseAuthClient:  firebaseAuthClient,
-		EditorService:       editorSvc,
-		NewsletterService:   newsletterSvc,
-		SubscriberService:   subscriberSvc,
-		PublishingService:   publishingSvc,
-		PasswordResetSvc:    passwordResetSvc,
-		EmailJobQueuer:      emailWorker,
-		EditorRepo:          editorRepo,
-		Logger:              sugar, // Pass the sugared logger
+		DB:                dbPool,
+		FirebaseAuth:      firebaseAuthClient,
+		NewsletterService: newsletterSvc,
+		SubscriberService: subscriberSvc,
+		PublishingService: publishingSvc,
+		EditorService:     editorSvc,
+		PasswordResetSvc:  passwordResetSvc,
+		EditorRepo:        editorRepo,
+		Logger:            sugar,
 	}
 	mainRouter := router.NewRouter(routerDeps)
-	sugar.Info("Chi router initialized")
 
 	// HTTP Server Setup
 	server := &http.Server{
-		Addr:    fmt.Sprintf(":%d", cfg.Port),
-		Handler: mainRouter, // Will be mainRouter (Chi router)
+		Addr:         fmt.Sprintf(":%d", cfg.Port),
+		Handler:      mainRouter,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -186,15 +131,18 @@ func main() {
 		<-sigChan
 
 		sugar.Info("Shutdown signal received, initiating graceful shutdown...")
-		cancel() // Signal cancellation to other parts of the application
-
+		
+		// Create shutdown context with timeout
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer shutdownCancel()
 
+		// Stop accepting new HTTP requests (this blocks until server is down)
+		sugar.Info("Shutting down HTTP server...")
 		if err := server.Shutdown(shutdownCtx); err != nil {
-			sugar.Fatalf("HTTP server Shutdown: %v", err)
+			sugar.Errorf("HTTP server shutdown error: %v", err)
+		} else {
+			sugar.Info("HTTP server shut down gracefully")
 		}
-		sugar.Info("HTTP server shut down gracefully")
 	}()
 
 	sugar.Infof("Starting server on port %d...", cfg.Port)

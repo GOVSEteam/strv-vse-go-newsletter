@@ -1,21 +1,18 @@
 package post_handler
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 
-	apperrors "github.com/GOVSEteam/strv-vse-go-newsletter/internal/errors"
 	commonHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/middleware"
-	"github.com/google/uuid"
 )
 
 type CreatePostRequest struct {
-	Title   string `json:"title"`
-	Content string `json:"content"`
+	Title   string `json:"title" validate:"required,min=3,max=150"`
+	Content string `json:"content" validate:"required,min=10"`
 }
 
 func CreatePostHandler(svc service.NewsletterServiceInterface) http.HandlerFunc {
@@ -23,11 +20,6 @@ func CreatePostHandler(svc service.NewsletterServiceInterface) http.HandlerFunc 
 		newsletterIDStr := chi.URLParam(r, "newsletterID")
 		if newsletterIDStr == "" {
 			commonHandler.JSONError(w, "Newsletter ID is required in path", http.StatusBadRequest)
-			return
-		}
-		newsletterID, err := uuid.Parse(newsletterIDStr)
-		if err != nil {
-			commonHandler.JSONError(w, "Invalid newsletter ID format", http.StatusBadRequest)
 			return
 		}
 
@@ -38,24 +30,13 @@ func CreatePostHandler(svc service.NewsletterServiceInterface) http.HandlerFunc 
 		}
 
 		var req CreatePostRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			commonHandler.JSONError(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
-			return
+		if !commonHandler.ValidateAndRespond(w, r, &req) {
+			return // Validation failed, response already sent
 		}
 
-		if req.Title == "" {
-			commonHandler.JSONError(w, "Post title cannot be empty", http.StatusBadRequest)
-			return
-		}
-		if req.Content == "" {
-			commonHandler.JSONError(w, "Post content cannot be empty", http.StatusBadRequest)
-			return
-		}
-
-		post, err := svc.CreatePost(r.Context(), editorID, newsletterID.String(), req.Title, req.Content)
+		post, err := svc.CreatePost(r.Context(), editorID, newsletterIDStr, req.Title, req.Content)
 		if err != nil {
-			statusCode := apperrors.ErrorToHTTPStatus(err)
-			commonHandler.JSONError(w, err.Error(), statusCode)
+			commonHandler.JSONErrorSecure(w, err, "post creation")
 			return
 		}
 

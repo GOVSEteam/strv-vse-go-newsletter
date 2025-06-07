@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	apperrors "github.com/GOVSEteam/strv-vse-go-newsletter/internal/errors"
@@ -28,14 +29,18 @@ var listPostsByNewsletterIDQuery string
 //go:embed queries/post/count_by_newsletter_id.sql
 var countPostsByNewsletterIDQuery string
 
-//go:embed queries/post/update.sql
-var updatePostQuery string
-
 //go:embed queries/post/delete.sql
 var deletePostQuery string
 
-//go:embed queries/post/mark_as_published.sql
-var markPostAsPublishedQuery string
+
+
+// PostUpdate defines the fields that can be updated for a post.
+// Only non-nil fields will be updated in the database.
+type PostUpdate struct {
+	Title       *string    `json:"title,omitempty"`
+	Content     *string    `json:"content,omitempty"`
+	PublishedAt **time.Time `json:"published_at,omitempty"` // Double pointer to distinguish between nil and NULL
+}
 
 // dbPost is an internal struct used for scanning database rows.
 // It maps directly to the 'posts' table schema.
@@ -62,20 +67,15 @@ func (dbP *dbPost) toModel() models.Post {
 	}
 }
 
-// toModelPtr converts a dbPost to a *models.Post domain object.
-func (dbP *dbPost) toModelPtr() *models.Post {
-	m := dbP.toModel()
-	return &m
-}
+
 
 // PostRepository defines the interface for post data access operations.
 type PostRepository interface {
 	CreatePost(ctx context.Context, post *models.Post) (*models.Post, error)
 	GetPostByID(ctx context.Context, postID string) (*models.Post, error)
 	ListPostsByNewsletterID(ctx context.Context, newsletterID string, limit int, offset int) ([]models.Post, int, error)
-	UpdatePost(ctx context.Context, post *models.Post) (*models.Post, error)
+	UpdatePost(ctx context.Context, postID string, updates PostUpdate) (*models.Post, error)
 	DeletePost(ctx context.Context, postID string) error
-	MarkPostAsPublished(ctx context.Context, postID string, publishedAt time.Time) (*models.Post, error)
 }
 
 type postgresPostRepository struct {
@@ -116,7 +116,8 @@ func (r *postgresPostRepository) CreatePost(ctx context.Context, post *models.Po
 		}
 		return nil, fmt.Errorf("post repo: CreatePost: scan: %w", err)
 	}
-	return createdPostDB.toModelPtr(), nil
+	model := createdPostDB.toModel()
+	return &model, nil
 }
 
 func (r *postgresPostRepository) GetPostByID(ctx context.Context, postID string) (*models.Post, error) {
@@ -130,7 +131,8 @@ func (r *postgresPostRepository) GetPostByID(ctx context.Context, postID string)
 		}
 		return nil, fmt.Errorf("post repo: GetPostByID: scan: %w", err)
 	}
-	return p.toModelPtr(), nil
+	model := p.toModel()
+	return &model, nil
 }
 
 func (r *postgresPostRepository) ListPostsByNewsletterID(ctx context.Context, newsletterID string, limit int, offset int) ([]models.Post, int, error) {
@@ -166,13 +168,54 @@ func (r *postgresPostRepository) ListPostsByNewsletterID(ctx context.Context, ne
 	return posts, totalCount, nil
 }
 
-func (r *postgresPostRepository) UpdatePost(ctx context.Context, post *models.Post) (*models.Post, error) {
-	post.UpdatedAt = time.Now().UTC()
-
+func (r *postgresPostRepository) UpdatePost(ctx context.Context, postID string, updates PostUpdate) (*models.Post, error) {
+	updatedAt := time.Now().UTC()
+	
+	// Build dynamic SET clause based on provided fields
+	var setParts []string
+	var args []interface{}
+	argIndex := 1
+	
+	if updates.Title != nil {
+		setParts = append(setParts, fmt.Sprintf("title = $%d", argIndex))
+		args = append(args, *updates.Title)
+		argIndex++
+	}
+	
+	if updates.Content != nil {
+		setParts = append(setParts, fmt.Sprintf("content = $%d", argIndex))
+		args = append(args, *updates.Content)
+		argIndex++
+	}
+	
+	if updates.PublishedAt != nil {
+		setParts = append(setParts, fmt.Sprintf("published_at = $%d", argIndex))
+		args = append(args, *updates.PublishedAt)
+		argIndex++
+	}
+	
+	if len(setParts) == 0 {
+		return nil, fmt.Errorf("post repo: UpdatePost: no fields to update")
+	}
+	
+	// Always update updated_at
+	setParts = append(setParts, fmt.Sprintf("updated_at = $%d", argIndex))
+	args = append(args, updatedAt)
+	argIndex++
+	
+	// Add postID as final parameter
+	args = append(args, postID)
+	
+	// Build final query
+	query := fmt.Sprintf(`
+		UPDATE posts 
+		SET %s 
+		WHERE id = $%d 
+		RETURNING id, newsletter_id, title, content, published_at, created_at, updated_at`,
+		strings.Join(setParts, ", "), argIndex)
+	
 	var updatedPostDB dbPost
-	err := r.db.QueryRow(ctx, updatePostQuery,
-		post.Title, post.Content, post.PublishedAt, post.UpdatedAt, post.ID,
-	).Scan(
+	err := r.db.QueryRow(ctx, query, args...).Scan(
 		&updatedPostDB.ID, &updatedPostDB.NewsletterID, &updatedPostDB.Title, &updatedPostDB.Content,
 		&updatedPostDB.PublishedAt, &updatedPostDB.CreatedAt, &updatedPostDB.UpdatedAt,
 	)
@@ -189,7 +232,8 @@ func (r *postgresPostRepository) UpdatePost(ctx context.Context, post *models.Po
 		}
 		return nil, fmt.Errorf("post repo: UpdatePost: scan: %w", err)
 	}
-	return updatedPostDB.toModelPtr(), nil
+	model := updatedPostDB.toModel()
+	return &model, nil
 }
 
 func (r *postgresPostRepository) DeletePost(ctx context.Context, postID string) error {
@@ -203,20 +247,3 @@ func (r *postgresPostRepository) DeletePost(ctx context.Context, postID string) 
 	return nil
 }
 
-func (r *postgresPostRepository) MarkPostAsPublished(ctx context.Context, postID string, publishedAt time.Time) (*models.Post, error) {
-	updatedAt := time.Now().UTC()
-
-	var publishedPostDB dbPost
-	err := r.db.QueryRow(ctx, markPostAsPublishedQuery, publishedAt, updatedAt, postID).Scan(
-		&publishedPostDB.ID, &publishedPostDB.NewsletterID, &publishedPostDB.Title, &publishedPostDB.Content,
-		&publishedPostDB.PublishedAt, &publishedPostDB.CreatedAt, &publishedPostDB.UpdatedAt,
-	)
-
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("post repo: MarkPostAsPublished: %w", apperrors.ErrPostNotFound)
-		}
-		return nil, fmt.Errorf("post repo: MarkPostAsPublished: scan: %w", err)
-	}
-	return publishedPostDB.toModelPtr(), nil
-}

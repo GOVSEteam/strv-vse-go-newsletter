@@ -22,8 +22,8 @@ var insertEditorQuery string
 //go:embed queries/editor/get_by_firebase_uid.sql
 var getEditorByFirebaseUIDQuery string
 
-// ErrEditorNotFound is returned when an editor is not found
-var ErrEditorNotFound = errors.New("editor not found")
+//go:embed queries/editor/get_by_id.sql
+var getEditorByIDQuery string
 
 // dbEditor is an internal struct used for scanning database rows.
 // It maps directly to the 'editors' table schema.
@@ -46,16 +46,13 @@ func (dbEd *dbEditor) toModel() models.Editor {
 	}
 }
 
-// toModelPtr converts a dbEditor to a *models.Editor domain object.
-func (dbEd *dbEditor) toModelPtr() *models.Editor {
-	m := dbEd.toModel()
-	return &m
-}
+
 
 // EditorRepository defines the interface for editor data access.
 type EditorRepository interface {
 	InsertEditor(ctx context.Context, firebaseUID, email string) (*models.Editor, error)
 	GetEditorByFirebaseUID(ctx context.Context, firebaseUID string) (*models.Editor, error)
+	GetEditorByID(ctx context.Context, id string) (*models.Editor, error)
 }
 
 // PostgresEditorRepo is the PostgreSQL implementation of EditorRepository.
@@ -63,9 +60,8 @@ type PostgresEditorRepo struct {
 	db *pgxpool.Pool
 }
 
-// EditorRepo creates a new PostgresEditorRepo.
-// Consider renaming to NewPostgresEditorRepo for consistency.
-func EditorRepo(db *pgxpool.Pool) EditorRepository {
+// NewPostgresEditorRepo creates a new PostgresEditorRepo.
+func NewPostgresEditorRepo(db *pgxpool.Pool) EditorRepository {
 	return &PostgresEditorRepo{db: db}
 }
 
@@ -83,7 +79,8 @@ func (r *PostgresEditorRepo) InsertEditor(ctx context.Context, firebaseUID, emai
 		}
 		return nil, fmt.Errorf("editor repo: InsertEditor: scan: %w", err)
 	}
-	return ed.toModelPtr(), nil
+	model := ed.toModel()
+	return &model, nil
 }
 
 // GetEditorByFirebaseUID retrieves an editor by their Firebase UID.
@@ -98,5 +95,22 @@ func (r *PostgresEditorRepo) GetEditorByFirebaseUID(ctx context.Context, firebas
 		}
 		return nil, fmt.Errorf("editor repo: GetEditorByFirebaseUID: scan: %w", err)
 	}
-	return ed.toModelPtr(), nil
+	model := ed.toModel()
+	return &model, nil
+}
+
+// GetEditorByID retrieves an editor by their database ID.
+func (r *PostgresEditorRepo) GetEditorByID(ctx context.Context, id string) (*models.Editor, error) {
+	var ed dbEditor
+	err := r.db.QueryRow(ctx, getEditorByIDQuery, id).Scan(
+		&ed.ID, &ed.FirebaseUID, &ed.Email, &ed.CreatedAt, &ed.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("editor repo: GetEditorByID: %w", apperrors.ErrEditorNotFound)
+		}
+		return nil, fmt.Errorf("editor repo: GetEditorByID: scan: %w", err)
+	}
+	model := ed.toModel()
+	return &model, nil
 }

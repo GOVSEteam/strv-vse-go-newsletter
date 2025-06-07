@@ -37,11 +37,7 @@ func (dbNl *dbNewsletter) toModel() models.Newsletter {
 	}
 }
 
-// toModelPtr converts a dbNewsletter to a *models.Newsletter domain object.
-func (dbNl *dbNewsletter) toModelPtr() *models.Newsletter {
-	m := dbNl.toModel()
-	return &m
-}
+
 
 // NewsletterRepository defines the interface for newsletter data access.
 type NewsletterRepository interface {
@@ -59,10 +55,8 @@ type PostgresNewsletterRepo struct {
 	db *pgxpool.Pool
 }
 
-// NewsletterRepo creates a new PostgresNewsletterRepo.
-// Note: This constructor name is kept from the original version for simplicity.
-// Consider renaming to NewPostgresNewsletterRepo for consistency if preferred.
-func NewsletterRepo(db *pgxpool.Pool) NewsletterRepository {
+// NewPostgresNewsletterRepo creates a new PostgresNewsletterRepo.
+func NewPostgresNewsletterRepo(db *pgxpool.Pool) NewsletterRepository {
 	return &PostgresNewsletterRepo{db: db}
 }
 
@@ -114,7 +108,8 @@ func (r *PostgresNewsletterRepo) CreateNewsletter(ctx context.Context, editorID,
 		}
 		return nil, fmt.Errorf("newsletter repo: CreateNewsletter: scan: %w", err)
 	}
-	return nl.toModelPtr(), nil
+	model := nl.toModel()
+	return &model, nil
 }
 
 // GetNewsletterByIDAndEditorID fetches a newsletter by its ID and verifies editor ownership.
@@ -133,7 +128,8 @@ func (r *PostgresNewsletterRepo) GetNewsletterByIDAndEditorID(newsletterID strin
 		}
 		return nil, fmt.Errorf("newsletter repo: GetNewsletterByIDAndEditorID: scan: %w", err)
 	}
-	return nl.toModelPtr(), nil
+	model := nl.toModel()
+	return &model, nil
 }
 
 // UpdateNewsletter updates a newsletter's name and/or description and its updated_at timestamp.
@@ -179,7 +175,8 @@ func (r *PostgresNewsletterRepo) UpdateNewsletter(newsletterID string, editorID 
 		// sql.ErrNoRows would be returned here.
 		return nil, errScan
 	}
-	return nl.toModelPtr(), nil
+	model := nl.toModel()
+	return &model, nil
 }
 
 // DeleteNewsletter removes a newsletter by its ID, ensuring it belongs to the editor.
@@ -208,7 +205,8 @@ func (r *PostgresNewsletterRepo) GetNewsletterByNameAndEditorID(ctx context.Cont
 		// For now, just a general error.
 		return nil, fmt.Errorf("newsletter repo: GetNewsletterByNameAndEditorID: scan: %w", err)
 	}
-	return nl.toModelPtr(), nil
+	model := nl.toModel()
+	return &model, nil
 }
 
 // GetNewsletterByID fetches a newsletter by its ID, without checking editor ownership.
@@ -227,5 +225,6 @@ func (r *PostgresNewsletterRepo) GetNewsletterByID(newsletterID string) (*Newsle
 		}
 		return nil, fmt.Errorf("newsletter repo: GetNewsletterByID: scan: %w", err)
 	}
-	return nl.toModelPtr(), nil
+	model := nl.toModel()
+	return &model, nil
 }

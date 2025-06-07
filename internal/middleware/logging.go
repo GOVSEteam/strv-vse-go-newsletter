@@ -9,6 +9,10 @@ import (
 	"go.uber.org/zap"
 )
 
+// contextKey is an unexported type for context keys to prevent collisions.
+// This type is shared across all middleware in this package.
+type contextKey string
+
 // requestIDContextKey is the key for storing the request ID in the context.
 const requestIDContextKey contextKey = "requestID"
 
@@ -21,11 +25,10 @@ func GetRequestIDFromContext(ctx context.Context) string {
 	return ""
 }
 
-// responseWriterInterceptor is a wrapper around http.ResponseWriter to capture status code and response size.
+// responseWriterInterceptor is a wrapper around http.ResponseWriter to capture status code.
 type responseWriterInterceptor struct {
 	http.ResponseWriter
 	statusCode int
-	size       int
 }
 
 // NewResponseWriterInterceptor creates a new responseWriterInterceptor.
@@ -40,34 +43,17 @@ func (rwi *responseWriterInterceptor) WriteHeader(statusCode int) {
 	rwi.ResponseWriter.WriteHeader(statusCode)
 }
 
-// Write captures the number of bytes written.
-func (rwi *responseWriterInterceptor) Write(b []byte) (int, error) {
-	size, err := rwi.ResponseWriter.Write(b)
-	rwi.size += size
-	return size, err
-}
-
 // LoggingMiddleware creates a new HTTP middleware for structured request logging.
 func LoggingMiddleware(logger *zap.SugaredLogger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
-		fn := func(w http.ResponseWriter, r *http.Request) {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			requestID := uuid.NewString()
 			ctx := context.WithValue(r.Context(), requestIDContextKey, requestID)
 			r = r.WithContext(ctx)
 
 			startTime := time.Now()
-
-			logger.Infow("Request started",
-				"requestID", requestID,
-				"method", r.Method,
-				"path", r.URL.Path,
-				"remoteAddr", r.RemoteAddr,
-				"userAgent", r.UserAgent(),
-			)
-
 			rwi := NewResponseWriterInterceptor(w)
 			next.ServeHTTP(rwi, r)
-
 			duration := time.Since(startTime)
 
 			logFields := []interface{}{
@@ -75,10 +61,8 @@ func LoggingMiddleware(logger *zap.SugaredLogger) func(http.Handler) http.Handle
 				"method", r.Method,
 				"path", r.URL.Path,
 				"status", rwi.statusCode,
-				"duration", duration.String(), // Or duration.Milliseconds() for numeric value
-				"size", rwi.size,
+				"duration", duration.String(),
 				"remoteAddr", r.RemoteAddr,
-				"userAgent", r.UserAgent(),
 			}
 
 			if rwi.statusCode >= http.StatusInternalServerError {
@@ -88,7 +72,6 @@ func LoggingMiddleware(logger *zap.SugaredLogger) func(http.Handler) http.Handle
 			} else {
 				logger.Infow("Request completed", logFields...)
 			}
-		}
-		return http.HandlerFunc(fn)
+		})
 	}
-} 
+}

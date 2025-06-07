@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"strconv"
 
-	apperrors "github.com/GOVSEteam/strv-vse-go-newsletter/internal/errors"
 	commonHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/middleware"
@@ -65,9 +64,7 @@ func ListHandler(svc service.NewsletterServiceInterface) http.HandlerFunc {
 		// Service method ListNewslettersByEditorID expects the editor's database ID.
 		newsletters, total, err := svc.ListNewslettersByEditorID(r.Context(), editorID, limit, offset)
 		if err != nil {
-			statusCode := apperrors.ErrorToHTTPStatus(err)
-			// log.Printf("Error listing newsletters: %v", err) // Example logging
-			commonHandler.JSONError(w, err.Error(), statusCode)
+			commonHandler.JSONErrorSecure(w, err, "newsletter list")
 			return
 		}
 

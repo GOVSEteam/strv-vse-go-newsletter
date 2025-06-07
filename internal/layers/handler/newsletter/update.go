@@ -1,23 +1,19 @@
 package newsletter
 
 import (
-	// "database/sql" // No longer directly checked
-	"encoding/json"
-	// "errors" // No longer directly checked
 	"net/http"
 
-	apperrors "github.com/GOVSEteam/strv-vse-go-newsletter/internal/errors"
 	commonHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/middleware"
-	// models is implicitly used by the service return type, no direct handler use here for response struct
+	"github.com/go-chi/chi/v5"
 )
 
 // UpdateNewsletterRequest defines the expected request body for updating a newsletter.
 // Using pointers to distinguish between a field not provided and a field provided with an empty value.
 type UpdateNewsletterRequest struct {
-	Name        *string `json:"name"`
-	Description *string `json:"description"`
+	Name        *string `json:"name" validate:"omitempty,min=2,max=100"`
+	Description *string `json:"description" validate:"omitempty,max=500"`
 }
 
 // UpdateHandler handles partial updates to a newsletter.
@@ -43,27 +39,20 @@ func UpdateHandler(svc service.NewsletterServiceInterface) http.HandlerFunc {
 		}
 
 		var req UpdateNewsletterRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			commonHandler.JSONError(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
-			return
+		if !commonHandler.ValidateAndRespond(w, r, &req) {
+			return // Validation failed, response already sent
 		}
 
-		// Input validation: if name is provided, it cannot be empty.
-		// More comprehensive validation (e.g., length) is in the service layer.
-		if req.Name != nil && *req.Name == "" {
-			err := apperrors.ErrNameEmpty // Or a more specific validation error for update
-			commonHandler.JSONError(w, err.Error(), apperrors.ErrorToHTTPStatus(err))
+		// Ensure at least one field is provided for update
+		if req.Name == nil && req.Description == nil {
+			commonHandler.JSONError(w, "At least one field (name or description) must be provided for update", http.StatusBadRequest)
 			return
 		}
-		// The service layer will handle the case where both req.Name and req.Description are nil
-		// (e.g., by only updating timestamps or returning a validation error if no change is made).
 
 		// The service UpdateNewsletter expects editorAuthID (e.g. FirebaseUID), newsletterID, and pointers for name/description.
 		updatedNewsletter, err := svc.UpdateNewsletter(r.Context(), editorAuthID, newsletterID, req.Name, req.Description)
 		if err != nil {
-			statusCode := apperrors.ErrorToHTTPStatus(err)
-			// log.Printf("Error updating newsletter %s: %v", newsletterID, err) // Example logging
-			commonHandler.JSONError(w, err.Error(), statusCode)
+			commonHandler.JSONErrorSecure(w, err, "newsletter update")
 			return
 		}
 

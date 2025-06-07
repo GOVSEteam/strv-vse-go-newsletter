@@ -13,7 +13,7 @@ func TestLoad(t *testing.T) {
 		name        string
 		envVars     map[string]string
 		expectError bool
-		errorField  string
+		errorText   string
 	}{
 		{
 			name: "valid configuration",
@@ -34,7 +34,7 @@ func TestLoad(t *testing.T) {
 				"APP_BASE_URL":             "http://localhost:8080",
 			},
 			expectError: true,
-			errorField:  "DATABASE_URL",
+			errorText:   "DATABASE_URL is required",
 		},
 		{
 			name: "missing FIREBASE_SERVICE_ACCOUNT",
@@ -44,7 +44,7 @@ func TestLoad(t *testing.T) {
 				"APP_BASE_URL":     "http://localhost:8080",
 			},
 			expectError: true,
-			errorField:  "FIREBASE_SERVICE_ACCOUNT",
+			errorText:   "FIREBASE_SERVICE_ACCOUNT is required",
 		},
 		{
 			name: "missing FIREBASE_API_KEY",
@@ -54,7 +54,7 @@ func TestLoad(t *testing.T) {
 				"APP_BASE_URL":             "http://localhost:8080",
 			},
 			expectError: true,
-			errorField:  "FIREBASE_API_KEY",
+			errorText:   "FIREBASE_API_KEY is required",
 		},
 		{
 			name: "missing APP_BASE_URL",
@@ -64,7 +64,7 @@ func TestLoad(t *testing.T) {
 				"FIREBASE_API_KEY":         "test-api-key",
 			},
 			expectError: true,
-			errorField:  "APP_BASE_URL",
+			errorText:   "APP_BASE_URL is required",
 		},
 		{
 			name: "invalid PORT",
@@ -76,20 +76,20 @@ func TestLoad(t *testing.T) {
 				"PORT":                     "invalid",
 			},
 			expectError: true,
-			errorField:  "PORT",
+			errorText:   "invalid PORT",
 		},
 		{
-			name: "email configuration validation",
+			name: "default values",
 			envVars: map[string]string{
 				"DATABASE_URL":             "postgres://localhost/test",
 				"FIREBASE_SERVICE_ACCOUNT": `{"type": "service_account"}`,
 				"FIREBASE_API_KEY":         "test-api-key",
 				"APP_BASE_URL":             "http://localhost:8080",
-				"GOOGLE_APP_PASSWORD":      "password",
-				// Missing EMAIL_FROM should trigger validation error
+				// PORT not set should default to 8080
+				// SMTP_HOST not set should default to smtp.gmail.com
+				// SMTP_PORT not set should default to 587
 			},
-			expectError: true,
-			errorField:  "EMAIL_FROM",
+			expectError: false,
 		},
 	}
 
@@ -108,9 +108,7 @@ func TestLoad(t *testing.T) {
 
 			if tt.expectError {
 				require.Error(t, err)
-				var configErr ConfigError
-				require.ErrorAs(t, err, &configErr)
-				assert.Equal(t, tt.errorField, configErr.Field)
+				assert.Contains(t, err.Error(), tt.errorText)
 			} else {
 				require.NoError(t, err)
 				assert.NotNil(t, config)
@@ -122,6 +120,13 @@ func TestLoad(t *testing.T) {
 					assert.Equal(t, "test-api-key", config.FirebaseAPIKey)
 					assert.Equal(t, "http://localhost:8080", config.AppBaseURL)
 					assert.Equal(t, 3000, config.Port)
+				}
+				
+				// Verify default values
+				if tt.name == "default values" {
+					assert.Equal(t, 8080, config.Port)
+					assert.Equal(t, "smtp.gmail.com", config.SMTPHost)
+					assert.Equal(t, "587", config.SMTPPort)
 				}
 			}
 
@@ -176,90 +181,54 @@ func TestConfig_GetDatabaseURL(t *testing.T) {
 	}
 }
 
-func TestConfig_IsEmailEnabled(t *testing.T) {
+func TestGetEnvWithDefault(t *testing.T) {
 	tests := []struct {
-		name              string
-		googleAppPassword string
-		emailFrom         string
-		expected          bool
+		name         string
+		key          string
+		envValue     string
+		defaultValue string
+		expected     string
 	}{
 		{
-			name:              "email enabled",
-			googleAppPassword: "password",
-			emailFrom:         "test@example.com",
-			expected:          true,
+			name:         "environment variable set",
+			key:          "TEST_VAR",
+			envValue:     "custom_value",
+			defaultValue: "default_value",
+			expected:     "custom_value",
 		},
 		{
-			name:              "missing password",
-			googleAppPassword: "",
-			emailFrom:         "test@example.com",
-			expected:          false,
+			name:         "environment variable not set",
+			key:          "UNSET_VAR",
+			envValue:     "",
+			defaultValue: "default_value",
+			expected:     "default_value",
 		},
 		{
-			name:              "missing email from",
-			googleAppPassword: "password",
-			emailFrom:         "",
-			expected:          false,
-		},
-		{
-			name:              "both missing",
-			googleAppPassword: "",
-			emailFrom:         "",
-			expected:          false,
+			name:         "environment variable empty string",
+			key:          "EMPTY_VAR",
+			envValue:     "",
+			defaultValue: "default_value",
+			expected:     "default_value",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := &Config{
-				GoogleAppPassword: tt.googleAppPassword,
-				EmailFrom:         tt.emailFrom,
+			// Clean up
+			os.Unsetenv(tt.key)
+			
+			// Set environment variable if provided
+			if tt.envValue != "" {
+				os.Setenv(tt.key, tt.envValue)
 			}
 
-			result := config.IsEmailEnabled()
+			result := getEnvWithDefault(tt.key, tt.defaultValue)
 			assert.Equal(t, tt.expected, result)
+
+			// Clean up
+			os.Unsetenv(tt.key)
 		})
 	}
-}
-
-func TestConfig_IsProduction(t *testing.T) {
-	tests := []struct {
-		name               string
-		railwayEnvironment string
-		expected           bool
-	}{
-		{
-			name:               "production environment",
-			railwayEnvironment: "production",
-			expected:           true,
-		},
-		{
-			name:               "development environment",
-			railwayEnvironment: "",
-			expected:           false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			config := &Config{
-				RailwayEnvironment: tt.railwayEnvironment,
-			}
-
-			result := config.IsProduction()
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestConfigError_Error(t *testing.T) {
-	err := ConfigError{
-		Field:   "TEST_FIELD",
-		Message: "test message",
-	}
-
-	expected := "config error: TEST_FIELD - test message"
-	assert.Equal(t, expected, err.Error())
 }
 
 // clearEnv removes all environment variables used by the configuration
@@ -271,6 +240,8 @@ func clearEnv() {
 		"FIREBASE_API_KEY",
 		"GOOGLE_APP_PASSWORD",
 		"EMAIL_FROM",
+		"SMTP_HOST",
+		"SMTP_PORT",
 		"APP_BASE_URL",
 		"PORT",
 		"RAILWAY_ENVIRONMENT",

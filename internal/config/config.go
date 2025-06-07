@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"strconv"
@@ -11,16 +12,18 @@ import (
 // Config holds all configuration values for the application
 type Config struct {
 	// Database configuration
-	DatabaseURL       string
-	DatabasePublicURL string
+	DatabaseURL            string
+	DatabasePublicURL      string
 
-	// Firebase configuration
+	// Firebase configuration  
 	FirebaseServiceAccount string
 	FirebaseAPIKey         string
 
 	// Email configuration
 	GoogleAppPassword string
 	EmailFrom         string
+	SMTPHost          string
+	SMTPPort          string
 
 	// Application configuration
 	AppBaseURL string
@@ -30,25 +33,14 @@ type Config struct {
 	RailwayEnvironment string
 }
 
-// ConfigError represents a configuration-related error
-type ConfigError struct {
-	Field   string
-	Message string
-}
-
-func (e ConfigError) Error() string {
-	return fmt.Sprintf("config error: %s - %s", e.Field, e.Message)
-}
-
 // Load reads configuration from environment variables and validates required fields
 func Load() (*Config, error) {
-	// Try to load .env file (optional, might not exist in production)
 	_ = godotenv.Load()
 
 	config := &Config{
 		DatabaseURL:            os.Getenv("DATABASE_URL"),
 		DatabasePublicURL:      os.Getenv("DATABASE_PUBLIC_URL"),
-		FirebaseServiceAccount: os.Getenv("FIREBASE_SERVICE_ACCOUNT"),
+		FirebaseServiceAccount: getFirebaseServiceAccount(),
 		FirebaseAPIKey:         os.Getenv("FIREBASE_API_KEY"),
 		GoogleAppPassword:      os.Getenv("GOOGLE_APP_PASSWORD"),
 		EmailFrom:              os.Getenv("EMAIL_FROM"),
@@ -56,88 +48,74 @@ func Load() (*Config, error) {
 		RailwayEnvironment:     os.Getenv("RAILWAY_ENVIRONMENT"),
 	}
 
-	// Parse port with default fallback
-	portStr := os.Getenv("PORT")
-	if portStr == "" {
-		config.Port = 8080 // Default port
-	} else {
-		port, err := strconv.Atoi(portStr)
-		if err != nil {
-			return nil, ConfigError{
-				Field:   "PORT",
-				Message: fmt.Sprintf("invalid port value '%s', must be a valid integer", portStr),
-			}
-		}
-		config.Port = port
+	// Set SMTP defaults
+	config.SMTPHost = getEnvWithDefault("SMTP_HOST", "smtp.gmail.com")
+	config.SMTPPort = getEnvWithDefault("SMTP_PORT", "587")
+
+	// Parse port with default
+	port, err := strconv.Atoi(getEnvWithDefault("PORT", "8080"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid PORT: %w", err)
 	}
+	config.Port = port
 
 	// Validate required fields
-	if err := config.Validate(); err != nil {
+	if err := config.validate(); err != nil {
 		return nil, err
 	}
 
 	return config, nil
 }
 
-// Validate checks that all required configuration fields are present
-func (c *Config) Validate() error {
-	// Check required database configuration
-	if c.DatabaseURL == "" {
-		return ConfigError{
-			Field:   "DATABASE_URL",
-			Message: "database URL is required",
-		}
+// validate checks required configuration fields
+func (c *Config) validate() error {
+	required := map[string]string{
+		"DATABASE_URL":             c.DatabaseURL,
+		"FIREBASE_SERVICE_ACCOUNT": c.FirebaseServiceAccount,
+		"FIREBASE_API_KEY":         c.FirebaseAPIKey,
+		"APP_BASE_URL":             c.AppBaseURL,
 	}
 
-	// Check required Firebase configuration
-	if c.FirebaseServiceAccount == "" {
-		return ConfigError{
-			Field:   "FIREBASE_SERVICE_ACCOUNT",
-			Message: "Firebase service account JSON is required",
-		}
-	}
-
-	if c.FirebaseAPIKey == "" {
-		return ConfigError{
-			Field:   "FIREBASE_API_KEY",
-			Message: "Firebase API key is required",
-		}
-	}
-
-	// Check required email configuration (only if Google App Password is set)
-	if c.GoogleAppPassword != "" && c.EmailFrom == "" {
-		return ConfigError{
-			Field:   "EMAIL_FROM",
-			Message: "email from address is required when Google App Password is configured",
-		}
-	}
-
-	// Check required application configuration
-	if c.AppBaseURL == "" {
-		return ConfigError{
-			Field:   "APP_BASE_URL",
-			Message: "application base URL is required",
+	for field, value := range required {
+		if value == "" {
+			return fmt.Errorf("%s is required", field)
 		}
 	}
 
 	return nil
 }
 
-// GetDatabaseURL returns the appropriate database URL based on environment
+// GetDatabaseURL returns the appropriate database URL
 func (c *Config) GetDatabaseURL() string {
-	// Use public URL if available and not in Railway environment
-	if c.RailwayEnvironment == "" && c.DatabasePublicURL != "" {
+	if c.DatabasePublicURL != "" && c.RailwayEnvironment == "" {
 		return c.DatabasePublicURL
 	}
 	return c.DatabaseURL
 }
 
-// IsEmailEnabled returns true if email sending is configured
-func (c *Config) IsEmailEnabled() bool {
-	return c.GoogleAppPassword != "" && c.EmailFrom != ""
+// getEnvWithDefault returns environment variable value or default if empty
+func getEnvWithDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }
 
-// IsProduction returns true if running in production environment
-func (c *Config) IsProduction() bool {
-	return c.RailwayEnvironment != ""
+// getFirebaseServiceAccount returns the Firebase service account JSON.
+// It tries multiple sources in order: file, base64 env var, plain env var.
+func getFirebaseServiceAccount() string {
+	// Try reading from file first (most reliable)
+	if data, err := os.ReadFile("firebase-service-account.json"); err == nil {
+		return string(data)
+	}
+	
+	// Try base64 encoded version
+	if encoded := os.Getenv("FIREBASE_SERVICE_ACCOUNT_BASE64"); encoded != "" {
+		if decoded, err := base64.StdEncoding.DecodeString(encoded); err == nil {
+			return string(decoded)
+		}
+	}
+	
+	// Fallback to plain JSON (may have issues with newlines)
+	return os.Getenv("FIREBASE_SERVICE_ACCOUNT")
 } 

@@ -3,8 +3,9 @@ package service
 import (
 	"context"
 	"fmt"
-	"os"
+	"strings"
 
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/config"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models"
 	// No direct import to internal/worker needed anymore
 )
@@ -20,19 +21,22 @@ type PublishingServiceInterface interface {
 type PublishingService struct {
 	newsletterService NewsletterServiceInterface // To get post details & mark as published
 	subscriberService SubscriberServiceInterface // To get active subscribers
-	emailJobQueuer    EmailJobQueuer             // Changed to EmailJobQueuer interface
+	emailService      EmailService               // For direct email sending
+	config            *config.Config             // Application configuration
 }
 
 // NewPublishingService creates a new PublishingService.
 func NewPublishingService(
 	newsletterService NewsletterServiceInterface,
 	subscriberService SubscriberServiceInterface,
-	emailJobQueuer EmailJobQueuer, // Uses the interface
+	emailService EmailService, // For direct email sending
+	cfg *config.Config,
 ) PublishingServiceInterface {
 	return &PublishingService{
 		newsletterService: newsletterService,
 		subscriberService: subscriberService,
-		emailJobQueuer:    emailJobQueuer,
+		emailService:      emailService,
+		config:            cfg,
 	}
 }
 
@@ -60,9 +64,8 @@ func (s *PublishingService) PublishPostToSubscribers(ctx context.Context, postID
 	}
 
 	// 2. Get active subscribers for the newsletter
-	// Fetch all active subscribers for this newsletter. Pagination limit -1 and offset 0 to fetch all.
-	// The service/repo should handle -1 as "all" or use a very large number.
-	activeSubscribers, _, err := s.subscriberService.ListActiveSubscribersByNewsletterID(ctx, editorFirebaseUID, post.NewsletterID, -1, 0)
+	// Use the efficient method that gets all active subscribers without pagination overhead
+	activeSubscribers, err := s.subscriberService.GetActiveSubscribersForNewsletter(ctx, post.NewsletterID)
 	if err != nil {
 		return fmt.Errorf("failed to get active subscribers for newsletter %s: %w", post.NewsletterID, err)
 	}
@@ -72,34 +75,30 @@ func (s *PublishingService) PublishPostToSubscribers(ctx context.Context, postID
 		// Still mark as published even if no one to send to.
 	} else {
 		fmt.Printf("Found %d active subscribers for newsletter %s. Enqueuing emails for post %s...\n", len(activeSubscribers), post.NewsletterID, postID)
-		appBaseURL := os.Getenv("APP_BASE_URL")
-		if appBaseURL == "" {
-			appBaseURL = "http://localhost:8080" // Default if not set
-			fmt.Println("Warning: APP_BASE_URL not set, defaulting to http://localhost:8080 for unsubscribe links.")
-		}
 
+		// For now, send emails synchronously to ensure they work
+		// TODO: Revert to async email worker once the database issues are resolved
 		for _, subscriber := range activeSubscribers {
 			if subscriber.UnsubscribeToken == "" {
 				fmt.Printf("Warning: Subscriber %s (ID: %s) missing unsubscribe token. Skipping email for post %s.\n", subscriber.Email, subscriber.ID, postID)
 				continue
 			}
-			unsubscribeLink := fmt.Sprintf("%s/api/subscriptions/unsubscribe?token=%s", appBaseURL, subscriber.UnsubscribeToken)
 
-			emailJob := models.EmailJob{
-				To:           subscriber.Email,
-				Subject:      post.Title,       // Use post.Title for subject
-				Body:         post.Content,     // Use post.Content for body
-				NewsletterID: post.NewsletterID, // For tracking
-				// UnsubscribeLink: unsubscribeLink, // The EmailJob itself doesn't need this; body should contain it.
+			// Generate unsubscribe link and extract recipient name
+			unsubscribeLink := fmt.Sprintf("%s/api/subscriptions/unsubscribe?token=%s", s.config.AppBaseURL, subscriber.UnsubscribeToken)
+			recipientName := subscriber.Email
+			if atIndex := strings.Index(subscriber.Email, "@"); atIndex > 0 {
+				recipientName = subscriber.Email[:atIndex]
 			}
-			// The email body should be constructed to include the unsubscribe link.
-			// For now, assuming post.Content is the full HTML body that includes this.
-			// A more robust solution would involve email templates.
-			emailJob.Body = fmt.Sprintf("%s<br><hr><p><small>To unsubscribe, click <a href=\"%s\">here</a>.</small></p>", post.Content, unsubscribeLink)
 
-			s.emailJobQueuer.EnqueueJob(emailJob)
-			// No direct error handling for enqueue here, assuming worker handles send failures.
-			// If EnqueueJob could fail (e.g., queue full and non-blocking), that would need handling.
+			// Send email directly using the email service
+			err := s.emailService.SendNewsletterIssueHTML(ctx, subscriber.Email, recipientName, post.Title, post.Content, unsubscribeLink)
+			if err != nil {
+				fmt.Printf("Warning: Failed to send email to %s for post %s: %v\n", subscriber.Email, postID, err)
+				// Continue with other subscribers instead of failing completely
+			} else {
+				fmt.Printf("Successfully sent email to %s for post %s\n", subscriber.Email, postID)
+			}
 		}
 		fmt.Printf("Finished enqueuing %d emails for post %s.\n", len(activeSubscribers), postID)
 	}

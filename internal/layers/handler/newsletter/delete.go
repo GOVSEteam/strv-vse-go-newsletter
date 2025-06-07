@@ -1,14 +1,12 @@
 package newsletter
 
 import (
-	// "database/sql" // No longer needed for direct error checking
-	// "errors" // No longer needed for direct error checking
 	"net/http"
 
-	apperrors "github.com/GOVSEteam/strv-vse-go-newsletter/internal/errors"
 	commonHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/middleware"
+	"github.com/go-chi/chi/v5"
 )
 
 // DeleteHandler handles the deletion of a newsletter.
@@ -39,9 +37,7 @@ func DeleteHandler(svc service.NewsletterServiceInterface) http.HandlerFunc {
 		// and the newsletter ID.
 		err := svc.DeleteNewsletter(r.Context(), editorAuthID, newsletterID)
 		if err != nil {
-			statusCode := apperrors.ErrorToHTTPStatus(err)
-			// log.Printf("Error deleting newsletter %s: %v", newsletterID, err) // Example logging
-			commonHandler.JSONError(w, err.Error(), statusCode)
+			commonHandler.JSONErrorSecure(w, err, "newsletter delete")
 			return
 		}
 

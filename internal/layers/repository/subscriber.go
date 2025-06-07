@@ -55,6 +55,8 @@ type SubscriberRepository interface {
 	CreateSubscriber(ctx context.Context, subscriber models.Subscriber) (string, error)
 	GetSubscriberByEmailAndNewsletterID(ctx context.Context, email string, newsletterID string) (*models.Subscriber, error)
 	ListSubscribersByNewsletterID(ctx context.Context, newsletterID string, limit int, offset int) ([]models.Subscriber, int, error)
+	ListActiveSubscribersByNewsletterID(ctx context.Context, newsletterID string, limit int, offset int) ([]models.Subscriber, int, error)
+	GetAllActiveSubscribersByNewsletterID(ctx context.Context, newsletterID string) ([]models.Subscriber, error)
 	UpdateSubscriberStatus(ctx context.Context, subscriberID string, status models.SubscriberStatus) error
 	UpdateSubscriberUnsubscribeToken(ctx context.Context, subscriberID string, newToken string) error
 	GetSubscriberByUnsubscribeToken(ctx context.Context, token string) (*models.Subscriber, error)
@@ -122,9 +124,10 @@ func (r *firestoreSubscriberRepository) ListSubscribersByNewsletterID(ctx contex
 	totalCount := int(countValue.(int64))
 
 	// Get paginated list
+	// Note: For now we'll remove OrderBy to avoid composite index requirement
+	// In production, you would create the composite index: newsletter_id + subscription_date
 	query := collRef.
 		Where("newsletter_id", "==", newsletterID).
-		OrderBy("subscription_date", firestore.Desc). // Ensure consistent ordering for pagination
 		Offset(offset).
 		Limit(limit)
 
@@ -149,6 +152,85 @@ func (r *firestoreSubscriberRepository) ListSubscribersByNewsletterID(ctx contex
 	}
 
 	return subscribers, totalCount, nil
+}
+
+func (r *firestoreSubscriberRepository) ListActiveSubscribersByNewsletterID(ctx context.Context, newsletterID string, limit int, offset int) ([]models.Subscriber, int, error) {
+	collRef := r.client.Collection(subscribersCollection)
+
+	// Get total count of ACTIVE subscribers only
+	countQuery := collRef.
+		Where("newsletter_id", "==", newsletterID).
+		Where("status", "==", models.SubscriberStatusActive)
+	aggregationQuery := countQuery.NewAggregationQuery().WithCount("all")
+	countSnapshot, err := aggregationQuery.Get(ctx)
+	if err != nil {
+		return nil, 0, fmt.Errorf("subscriber repo: ListActiveSubscribersByNewsletterID: count query: %w: %v", apperrors.ErrInternal, err)
+	}
+	countValue, ok := countSnapshot["all"]
+	if !ok {
+		return nil, 0, fmt.Errorf("subscriber repo: ListActiveSubscribersByNewsletterID: count aggregation did not return 'all' field: %w", apperrors.ErrInternal)
+	}
+	totalCount := int(countValue.(int64))
+
+	// Get paginated list of ACTIVE subscribers only
+	// Note: For now we'll remove OrderBy to avoid composite index requirement
+	// In production, you would create the composite index: newsletter_id + status + subscription_date
+	query := collRef.
+		Where("newsletter_id", "==", newsletterID).
+		Where("status", "==", models.SubscriberStatusActive).
+		Offset(offset).
+		Limit(limit)
+
+	iter := query.Documents(ctx)
+	defer iter.Stop()
+
+	var activeSubscribers []models.Subscriber
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, 0, fmt.Errorf("subscriber repo: ListActiveSubscribersByNewsletterID: iterate: %w: %v", apperrors.ErrInternal, err)
+		}
+		var dbSub dbSubscriber
+		if errData := doc.DataTo(&dbSub); errData != nil {
+			return nil, 0, fmt.Errorf("subscriber repo: ListActiveSubscribersByNewsletterID: decode: %w: %v", apperrors.ErrInternal, errData)
+		}
+		activeSubscribers = append(activeSubscribers, dbSub.toDomain(doc.Ref.ID))
+	}
+
+	return activeSubscribers, totalCount, nil
+}
+
+func (r *firestoreSubscriberRepository) GetAllActiveSubscribersByNewsletterID(ctx context.Context, newsletterID string) ([]models.Subscriber, error) {
+	// Query for ALL active subscribers without pagination (used for bulk email operations)
+	// Note: Removed OrderBy to avoid requiring a composite index for newsletter_id + status + subscription_date
+	// For email publishing, the order doesn't matter
+	query := r.client.Collection(subscribersCollection).
+		Where("newsletter_id", "==", newsletterID).
+		Where("status", "==", models.SubscriberStatusActive)
+
+	iter := query.Documents(ctx)
+	defer iter.Stop()
+
+	var activeSubscribers []models.Subscriber
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("subscriber repo: GetAllActiveSubscribersByNewsletterID: iterate: %w: %v", apperrors.ErrInternal, err)
+		}
+		var dbSub dbSubscriber
+		if errData := doc.DataTo(&dbSub); errData != nil {
+			return nil, fmt.Errorf("subscriber repo: GetAllActiveSubscribersByNewsletterID: decode: %w: %v", apperrors.ErrInternal, errData)
+		}
+		activeSubscribers = append(activeSubscribers, dbSub.toDomain(doc.Ref.ID))
+	}
+
+	return activeSubscribers, nil
 }
 
 func (r *firestoreSubscriberRepository) UpdateSubscriberStatus(ctx context.Context, subscriberID string, newStatus models.SubscriberStatus) error {

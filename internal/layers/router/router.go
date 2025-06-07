@@ -1,27 +1,18 @@
 package router
 
 import (
-	"context"
-	"fmt"
 	"net/http"
-	"os"
-	"time"
 
-	"cloud.google.com/go/firestore"
 	"firebase.google.com/go/v4/auth"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
-	"github.com/go-chi/httprate"
 	"go.uber.org/zap"
 
-	// Assuming commonHandler.JSONError and commonHandler.JSONResponse are correctly defined
-	// If not, they would need to be part of a shared handler utility package.
-	// commonHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/editor"
 	newsletterHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/newsletter"
 	postHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/post"
 	subscriberHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/subscriber"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository" // For EditorRepository in AuthMiddleware
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/pkg/email" // Added email package
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/setup"
@@ -33,7 +24,7 @@ import (
 func Router() http.Handler {
 	r := chi.NewRouter()
 
-// NewRouter creates and configures a new Chi router with all dependencies and routes.
+// NewRouter creates a simple Chi router for the newsletter service.
 func NewRouter(deps RouterDependencies) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -129,79 +120,3 @@ func NewRouter(deps RouterDependencies) *chi.Mux {
 
 	return r
 }
-
-// healthHandler checks the health of essential services like the database.
-func healthHandler(db *pgxpool.Pool, firestoreClient *firestore.Client) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// Check DB
-		if db != nil {
-			ctxDB, cancelDB := context.WithTimeout(r.Context(), 5*time.Second)
-			defer cancelDB()
-			if err := db.Ping(ctxDB); err != nil {
-				http.Error(w, fmt.Sprintf("DB health check failed: %v", err), http.StatusServiceUnavailable)
-				return
-			}
-		} else {
-			http.Error(w, "DB client not initialized for health check", http.StatusServiceUnavailable)
-			return
-		}
-
-		// Check Firestore (optional, only if critical for health)
-		if firestoreClient != nil {
-			// _, cancelFirestore := context.WithTimeout(r.Context(), 5*time.Second) // ctx was unused
-			// defer cancelFirestore()
-			// A simple check: try to get a non-existent document from a known collection
-			// This doesn't verify data integrity but checks connectivity and basic API functionality.
-			// Replace "some_known_collection" if you have a specific one for this.
-			// Or, if there's a more specific health check API for Firestore client.
-			// For now, we'll assume if the client exists, it's "healthy enough" for this basic check.
-			// A more robust check would involve a light read/write or a specific health endpoint if available.
-			// _, err := firestoreClient.Collection("some_test_collection_for_health").Doc("test_doc").Get(ctxFirestore)
-			// if err != nil && status.Code(err) != codes.NotFound {
-			//  http.Error(w, fmt.Sprintf("Firestore health check failed: %v\", err), http.StatusServiceUnavailable)
-			// return
-			// }
-			// For simplicity, if client is not nil, assume connected.
-		}
-		// If Firestore client is nil and it's essential, this should also fail.
-		// For now, assume it\'s not nil if passed.
-
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("Healthy"))
-	}
-}
-
-// readinessHandler checks if the application is ready to serve traffic.
-// This might include checks similar to health but could also verify if all initial setup is complete.
-func readinessHandler(db *pgxpool.Pool, firestoreClient *firestore.Client) http.HandlerFunc {
-	// For now, readiness is the same as health. Can be expanded later.
-	return healthHandler(db, firestoreClient)
-}
-
-// --- Helper to adapt existing handlers if needed ---
-// Example: if a handler had a different signature or was a method on a struct.
-// func adaptOldHandler(oldHandlerFunc func(service.SomeService, repository.SomeRepo) http.HandlerFunc,
-//    svc service.SomeService, repo repository.SomeRepo) http.HandlerFunc {
-//  return oldHandlerFunc(svc, repo)
-// }
-// However, based on previous refactoring, handlers should take service interfaces.
-
-// Placeholder for the actual authentication middleware.
-// func AuthMiddlewarePlaceholder(next http.Handler) http.Handler {
-// \treturn http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// \t\t// TODO: Implement actual JWT verification and context injection
-// \t\t// For now, assume authenticated and pass through
-// \t\t// log.Println("AuthMiddlewarePlaceholder: Request passing through (simulating auth)")
-// \t\t// editorID := "dummy-editor-id-from-auth" // Replace with actual ID from token
-// \t\t// ctx := context.WithValue(r.Context(), middleware.EditorIDContextKey, editorID)
-// \t\t// next.ServeHTTP(w, r.WithContext(ctx))
-// \t\tnext.ServeHTTP(w, r)
-// \t})
-// }
-
-// Note:
-// - The `editorRepo` is passed to `AuthMiddleware`. Ensure `EditorRepository` interface matches what AuthMiddleware expects.
-// - `PasswordResetRequestHandler` from `editor` package is assumed to take `PasswordResetService`.
-// - All other handlers are assumed to take their respective service interfaces as per previous refactoring steps.
-// - Ensure `docs/openapi.yaml` exists or Swagger UI will not work correctly.
-// - CORS is set to be very permissive; tighten this for production.

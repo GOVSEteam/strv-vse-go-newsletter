@@ -10,8 +10,8 @@ import (
 	"google.golang.org/api/option"
 )
 
-// NewFirebaseApp initializes and returns a new Firebase app.
-// It requires a context and the Firebase service account JSON as a string.
+// NewFirebaseApp initializes a Firebase app with the provided service account JSON.
+// This is the foundation for all other Firebase services.
 func NewFirebaseApp(ctx context.Context, serviceAccountJSON string) (*firebase.App, error) {
 	if serviceAccountJSON == "" {
 		return nil, fmt.Errorf("Firebase service account JSON is required")
@@ -22,14 +22,13 @@ func NewFirebaseApp(ctx context.Context, serviceAccountJSON string) (*firebase.A
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize Firebase app: %w", err)
 	}
+
 	return app, nil
 }
 
-// NewAuthClient initializes and returns a new Firebase Auth client from a Firebase app.
+// NewAuthClient initializes a Firebase Auth client from the given Firebase app.
+// This client is used for JWT token verification and user management.
 func NewAuthClient(ctx context.Context, app *firebase.App) (*auth.Client, error) {
-	if app == nil {
-		return nil, fmt.Errorf("Firebase app is required to create Auth client")
-	}
 	client, err := app.Auth(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Firebase Auth client: %w", err)
@@ -37,11 +36,9 @@ func NewAuthClient(ctx context.Context, app *firebase.App) (*auth.Client, error)
 	return client, nil
 }
 
-// NewFirestoreClient initializes and returns a new Firestore client from a Firebase app.
+// NewFirestoreClient initializes a Firestore client from the given Firebase app.
+// This client is used for NoSQL document database operations.
 func NewFirestoreClient(ctx context.Context, app *firebase.App) (*firestore.Client, error) {
-	if app == nil {
-		return nil, fmt.Errorf("Firebase app is required to create Firestore client")
-	}
 	client, err := app.Firestore(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Firestore client: %w", err)

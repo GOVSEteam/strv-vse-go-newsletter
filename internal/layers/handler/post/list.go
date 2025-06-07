@@ -6,7 +6,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	apperrors "github.com/GOVSEteam/strv-vse-go-newsletter/internal/errors"
 	commonHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/middleware"
@@ -71,8 +70,7 @@ func ListPostsByNewsletterHandler(svc service.NewsletterServiceInterface) http.H
 
 		posts, total, err := svc.ListPostsByNewsletterID(r.Context(), newsletterIDStr, limit, offset)
 		if err != nil {
-			statusCode := apperrors.ErrorToHTTPStatus(err)
-			commonHandler.JSONError(w, err.Error(), statusCode)
+			commonHandler.JSONErrorSecure(w, err, "post list")
 			return
 		}
 

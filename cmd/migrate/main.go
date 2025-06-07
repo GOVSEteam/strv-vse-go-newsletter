@@ -5,10 +5,9 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"os"
 
-	"github.com/joho/godotenv"
-	_ "github.com/lib/pq"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/config"
+	_ "github.com/jackc/pgx/v5/stdlib" // Register pgx driver for database/sql
 	"github.com/pressly/goose/v3"
 )
 
@@ -16,17 +15,19 @@ func main() {
 	var dir = flag.String("dir", "migrations", "directory with migration files")
 	flag.Parse()
 
-	// Load environment variables
-	if err := godotenv.Load(); err != nil {
-		log.Printf("Warning: .env file not found")
+	// Load configuration using centralized config system
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	dbURL := os.Getenv("DATABASE_URL")
+	dbURL := cfg.GetDatabaseURL()
 	if dbURL == "" {
-		log.Fatal("DATABASE_URL environment variable is required")
+		log.Fatal("DATABASE_URL is required but not configured")
 	}
 
-	db, err := sql.Open("postgres", dbURL)
+	// Use pgx with database/sql compatibility
+	db, err := sql.Open("pgx", dbURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}

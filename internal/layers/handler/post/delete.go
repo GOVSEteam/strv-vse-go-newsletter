@@ -5,7 +5,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	apperrors "github.com/GOVSEteam/strv-vse-go-newsletter/internal/errors"
 	commonHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/middleware"
@@ -27,8 +26,7 @@ func DeletePostHandler(svc service.NewsletterServiceInterface) http.HandlerFunc 
 
 		err := svc.DeletePost(r.Context(), editorID, postIDStr)
 		if err != nil {
-			statusCode := apperrors.ErrorToHTTPStatus(err)
-			commonHandler.JSONError(w, err.Error(), statusCode)
+			commonHandler.JSONErrorSecure(w, err, "post delete")
 			return
 		}
 

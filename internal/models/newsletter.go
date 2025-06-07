@@ -1,12 +1,13 @@
 package models
 
 import (
-	"errors"
+	"strings"
 	"time"
+
+	apperrors "github.com/GOVSEteam/strv-vse-go-newsletter/internal/errors"
 )
 
-// Newsletter represents the domain model for a newsletter.
-// It contains no database or persistence-specific tags.
+// Newsletter represents the domain model for a newsletter
 type Newsletter struct {
 	ID          string    `json:"id"`
 	EditorID    string    `json:"editorId"`
@@ -16,18 +17,30 @@ type Newsletter struct {
 	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
-// Validate performs basic validation on the Newsletter fields.
-// This can be extended with more specific business rules.
+// Validate performs business validation on the Newsletter fields
 func (n *Newsletter) Validate() error {
-	if n.ID == "" {
-		return errors.New("newsletter ID is required")
+	if strings.TrimSpace(n.ID) == "" {
+		return apperrors.WrapValidation(nil, "newsletter ID is required")
 	}
-	if n.EditorID == "" {
-		return errors.New("editor ID is required for newsletter")
+	
+	if strings.TrimSpace(n.EditorID) == "" {
+		return apperrors.WrapValidation(nil, "editor ID is required for newsletter")
 	}
-	if n.Name == "" {
-		return errors.New("newsletter name is required")
+	
+	trimmedName := strings.TrimSpace(n.Name)
+	if trimmedName == "" {
+		return apperrors.ErrNameEmpty
 	}
-	// Add other validation rules as needed, e.g., max length for Name/Description
+	if len(trimmedName) < 3 {
+		return apperrors.WrapValidation(nil, "newsletter name must be at least 3 characters")
+	}
+	if len(trimmedName) > 100 {
+		return apperrors.WrapValidation(nil, "newsletter name exceeds maximum length of 100 characters")
+	}
+	
+	if len(strings.TrimSpace(n.Description)) > 500 {
+		return apperrors.WrapValidation(nil, "newsletter description exceeds maximum length of 500 characters")
+	}
+	
 	return nil
 } 
