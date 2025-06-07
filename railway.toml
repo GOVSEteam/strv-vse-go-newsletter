@@ -4,7 +4,7 @@ buildCommand = "go build -o main cmd/server/main.go && go build -o migrate cmd/m
 
 [deploy]
 startCommand = "./main"
-healthcheckPath = "/healthz"
+healthcheckPath = "/health"
 restartPolicyType = "on_failure"
 
 [[deploy.environmentVariables]]

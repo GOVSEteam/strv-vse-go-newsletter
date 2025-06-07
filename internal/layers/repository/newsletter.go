@@ -16,13 +16,39 @@ import (
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models"
 )
 
-type Newsletter struct {
-	ID          string    `json:"id"`
-	EditorID    string    `json:"editor_id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+// Embedded SQL queries
+//go:embed queries/newsletter/create.sql
+var createNewsletterQuery string
+
+//go:embed queries/newsletter/list_by_editor_id.sql
+var listNewslettersByEditorIDQuery string
+
+//go:embed queries/newsletter/count_by_editor_id.sql
+var countNewslettersByEditorIDQuery string
+
+//go:embed queries/newsletter/get_by_id.sql
+var getNewsletterByIDQuery string
+
+//go:embed queries/newsletter/get_by_id_and_editor_id.sql
+var getNewsletterByIDAndEditorIDQuery string
+
+//go:embed queries/newsletter/get_by_name_and_editor_id.sql
+var getNewsletterByNameAndEditorIDQuery string
+
+//go:embed queries/newsletter/update.sql
+var updateNewsletterQuery string
+
+//go:embed queries/newsletter/delete.sql
+var deleteNewsletterQuery string
+
+// dbNewsletter represents the database structure for a newsletter.
+type dbNewsletter struct {
+	ID          string    `db:"id"`
+	EditorID    string    `db:"editor_id"`
+	Name        string    `db:"name"`
+	Description string    `db:"description"`
+	CreatedAt   time.Time `db:"created_at"`
+	UpdatedAt   time.Time `db:"updated_at"`
 }
 
 // toModel converts a dbNewsletter to a models.Newsletter domain object.
@@ -36,8 +62,6 @@ func (dbNl *dbNewsletter) toModel() models.Newsletter {
 		UpdatedAt:   dbNl.UpdatedAt,
 	}
 }
-
-
 
 // NewsletterRepository defines the interface for newsletter data access.
 type NewsletterRepository interface {
@@ -113,15 +137,11 @@ func (r *PostgresNewsletterRepo) CreateNewsletter(ctx context.Context, editorID,
 }
 
 // GetNewsletterByIDAndEditorID fetches a newsletter by its ID and verifies editor ownership.
-func (r *PostgresNewsletterRepo) GetNewsletterByIDAndEditorID(newsletterID string, editorID string) (*Newsletter, error) {
-	query := `
-		SELECT id, editor_id, name, description, created_at, updated_at 
-		FROM newsletters 
-		WHERE id = $1 AND editor_id = $2`
-	row := r.db.QueryRow(query, newsletterID, editorID)
-
-	var n Newsletter
-	err := row.Scan(&n.ID, &n.EditorID, &n.Name, &n.Description, &n.CreatedAt, &n.UpdatedAt)
+func (r *PostgresNewsletterRepo) GetNewsletterByIDAndEditorID(ctx context.Context, newsletterID string, editorID string) (*models.Newsletter, error) {
+	var nl dbNewsletter
+	err := r.db.QueryRow(ctx, getNewsletterByIDAndEditorIDQuery, newsletterID, editorID).Scan(
+		&nl.ID, &nl.EditorID, &nl.Name, &nl.Description, &nl.CreatedAt, &nl.UpdatedAt,
+	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("newsletter repo: GetNewsletterByIDAndEditorID: %w", apperrors.ErrNewsletterNotFound)
@@ -134,8 +154,8 @@ func (r *PostgresNewsletterRepo) GetNewsletterByIDAndEditorID(newsletterID strin
 
 // UpdateNewsletter updates a newsletter's name and/or description and its updated_at timestamp.
 // It ensures that the update is performed by the owner.
-func (r *PostgresNewsletterRepo) UpdateNewsletter(newsletterID string, editorID string, name *string, description *string) (*Newsletter, error) {
-	currentNewsletter, err := r.GetNewsletterByIDAndEditorID(newsletterID, editorID)
+func (r *PostgresNewsletterRepo) UpdateNewsletter(ctx context.Context, newsletterID string, editorID string, name *string, description *string) (*models.Newsletter, error) {
+	currentNewsletter, err := r.GetNewsletterByIDAndEditorID(ctx, newsletterID, editorID)
 	if err != nil {
 		// GetNewsletterByIDAndEditorID already wraps ErrNoRows to ErrNewsletterNotFound and adds context
 		return nil, fmt.Errorf("newsletter repo: UpdateNewsletter: fetching current: %w", err)
@@ -151,29 +171,15 @@ func (r *PostgresNewsletterRepo) UpdateNewsletter(newsletterID string, editorID 
 		updatedDescription = *description
 	}
 
-	// Ensure name is not empty if provided for update
-	if name != nil && *name == "" {
-		// This validation should ideally be in the service or handler,
-		// but as a safeguard here if name is being explicitly set to empty.
-		// For this example, we'll allow it, assuming higher layers validate.
-		// If name is mandatory for a newsletter, the table schema should reflect that.
-	}
-
-	query := `
-		UPDATE newsletters
-		SET name = $1, description = $2, updated_at = NOW()
-		WHERE id = $3 AND editor_id = $4
-		RETURNING id, editor_id, name, description, created_at, updated_at`
-
-	row := r.db.QueryRow(query, updatedName, updatedDescription, newsletterID, editorID)
-
-	var n Newsletter
-	errScan := row.Scan(&n.ID, &n.EditorID, &n.Name, &n.Description, &n.CreatedAt, &n.UpdatedAt)
-	if errScan != nil {
-		// If the RETURNING clause didn't find a row (e.g., id or editor_id didn't match,
-		// which shouldn't happen if GetNewsletterByIDAndEditorID passed),
-		// sql.ErrNoRows would be returned here.
-		return nil, errScan
+	var nl dbNewsletter
+	err = r.db.QueryRow(ctx, updateNewsletterQuery, updatedName, updatedDescription, newsletterID, editorID).Scan(
+		&nl.ID, &nl.EditorID, &nl.Name, &nl.Description, &nl.CreatedAt, &nl.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("newsletter repo: UpdateNewsletter: %w", apperrors.ErrNewsletterNotFound)
+		}
+		return nil, fmt.Errorf("newsletter repo: UpdateNewsletter: scan: %w", err)
 	}
 	model := nl.toModel()
 	return &model, nil
@@ -201,24 +207,18 @@ func (r *PostgresNewsletterRepo) GetNewsletterByNameAndEditorID(ctx context.Cont
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("newsletter repo: GetNewsletterByNameAndEditorID: %w", apperrors.ErrNewsletterNotFound)
 		}
-		// Check for unique constraint violation if applicable, though less likely for a GetByName.
-		// For now, just a general error.
 		return nil, fmt.Errorf("newsletter repo: GetNewsletterByNameAndEditorID: scan: %w", err)
 	}
 	model := nl.toModel()
 	return &model, nil
 }
 
-// GetNewsletterByID fetches a newsletter by its ID, without checking editor ownership.
-func (r *PostgresNewsletterRepo) GetNewsletterByID(newsletterID string) (*Newsletter, error) {
-	query := `
-		SELECT id, editor_id, name, description, created_at, updated_at 
-		FROM newsletters 
-		WHERE id = $1`
-	row := r.db.QueryRow(query, newsletterID)
-
-	var n Newsletter
-	err := row.Scan(&n.ID, &n.EditorID, &n.Name, &n.Description, &n.CreatedAt, &n.UpdatedAt)
+// GetNewsletterByID fetches a newsletter by its ID.
+func (r *PostgresNewsletterRepo) GetNewsletterByID(ctx context.Context, newsletterID string) (*models.Newsletter, error) {
+	var nl dbNewsletter
+	err := r.db.QueryRow(ctx, getNewsletterByIDQuery, newsletterID).Scan(
+		&nl.ID, &nl.EditorID, &nl.Name, &nl.Description, &nl.CreatedAt, &nl.UpdatedAt,
+	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("newsletter repo: GetNewsletterByID: %w", apperrors.ErrNewsletterNotFound)

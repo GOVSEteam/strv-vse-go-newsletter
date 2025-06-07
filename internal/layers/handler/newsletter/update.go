@@ -3,10 +3,11 @@ package newsletter
 import (
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+
 	commonHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/middleware"
-	"github.com/go-chi/chi/v5"
 )
 
 // UpdateNewsletterRequest defines the expected request body for updating a newsletter.
@@ -20,12 +21,7 @@ type UpdateNewsletterRequest struct {
 // It relies on AuthMiddleware for authentication and editor ID retrieval.
 func UpdateHandler(svc service.NewsletterServiceInterface) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPatch {
-			commonHandler.JSONError(w, "Method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-
-		newsletterID := r.PathValue("newsletterID") // Requires Go 1.22+ and router pattern like /api/newsletters/{id}
+		newsletterID := chi.URLParam(r, "newsletterID") // Fixed: Use chi.URLParam with correct parameter name
 		if newsletterID == "" {
 			commonHandler.JSONError(w, "Newsletter ID is required in path", http.StatusBadRequest)
 			return
