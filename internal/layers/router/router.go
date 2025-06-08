@@ -55,6 +55,11 @@ func NewRouter(deps RouterDependencies) *chi.Mux {
 		w.Write([]byte("OK"))
 	})
 
+	// Serve OpenAPI specification
+	r.Get("/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "docs/openapi.yaml")
+	})
+
 	// API routes
 	r.Route("/api", func(r chi.Router) {
 		// Public routes
