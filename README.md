@@ -35,8 +35,7 @@ This service provides API endpoints for:
    DATABASE_PUBLIC_URL=your_public_postgres_url # (optional, for public access)
 
    # Firebase Authentication
-   FIREBASE_SERVICE_ACCOUNT=your_firebase_service_account_json # (or use file or base64, see below)
-   FIREBASE_SERVICE_ACCOUNT_BASE64=your_base64_encoded_service_account_json # (optional)
+   FIREBASE_SERVICE_ACCOUNT=your_firebase_service_account_json
    FIREBASE_API_KEY=your_firebase_api_key
 
    # Email Service
@@ -50,11 +49,8 @@ This service provides API endpoints for:
    PORT=8080
    RAILWAY_ENVIRONMENT= # (optional, for Railway deployments)
    ```
-   **Firebase Service Account loading:**
-   - The service will try to load the service account in this order:
-     1. `firebase-service-account.json` file in the root
-     2. `FIREBASE_SERVICE_ACCOUNT_BASE64` (base64-encoded JSON)
-     3. `FIREBASE_SERVICE_ACCOUNT` (plain JSON string)
+   **Firebase Service Account:**
+   - Configure using `FIREBASE_SERVICE_ACCOUNT` environment variable with JSON string
 
 3. **Run database migrations:**
    ```bash
@@ -168,7 +164,7 @@ curl https://strv-vse-go-newsletter-production.up.railway.app/health
 
 ## Notes
 - All environment variables are loaded via `internal/config` and validated at startup.
-- Firebase service account can be provided as a file, base64 env, or plain env var.
+- Firebase service account is provided via JSON string environment variable.
 - All email sending is currently direct (sync), but can be switched to async worker.
 - All list endpoints support pagination via `limit` and `offset` query params.
 - All endpoints return JSON responses.

@@ -5,17 +5,20 @@ import (
 	"net/http"
 	"strings"
 
+	"firebase.google.com/go/v4/auth"
 	apperrors "github.com/GOVSEteam/strv-vse-go-newsletter/internal/errors"
-	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models"
 )
 
-// Use the centralized FirebaseAuthClient interface from the service package
-type AuthClient = service.FirebaseAuthClient
+// VerifiedToken represents a verified authentication token (abstracted from Firebase).
+type VerifiedToken struct {
+	UID string
+}
 
-// EditorRepository defines the interface for editor data access.
-type EditorRepository interface {
-	GetEditorByFirebaseUID(ctx context.Context, firebaseUID string) (*models.Editor, error)
+// AuthClient defines the interface for authentication operations (provider-agnostic).
+type AuthClient interface {
+	VerifyIDToken(ctx context.Context, token string) (*VerifiedToken, error)
 }
 
 const (
@@ -25,7 +28,7 @@ const (
 )
 
 // AuthMiddleware creates authentication middleware for Firebase JWT tokens.
-func AuthMiddleware(authClient AuthClient, editorRepo EditorRepository) func(http.Handler) http.Handler {
+func AuthMiddleware(authClient AuthClient, editorRepo repository.EditorRepository) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Extract Bearer token
@@ -96,5 +99,25 @@ func GetFirebaseUIDFromContext(ctx context.Context) string {
 		return firebaseUID
 	}
 	return ""
+}
+
+// FirebaseAuthAdapter adapts Firebase auth.Client to AuthClient interface.
+// This adapter converts Firebase-specific types to domain types for the middleware.
+type FirebaseAuthAdapter struct {
+	client *auth.Client
+}
+
+// NewFirebaseAuthAdapter creates a new Firebase auth adapter.
+func NewFirebaseAuthAdapter(client *auth.Client) AuthClient {
+	return &FirebaseAuthAdapter{client: client}
+}
+
+// VerifyIDToken verifies a Firebase ID token and returns a domain VerifiedToken.
+func (a *FirebaseAuthAdapter) VerifyIDToken(ctx context.Context, token string) (*VerifiedToken, error) {
+	firebaseToken, err := a.client.VerifyIDToken(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	return &VerifiedToken{UID: firebaseToken.UID}, nil
 }
 

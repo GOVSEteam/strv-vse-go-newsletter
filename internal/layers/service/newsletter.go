@@ -185,6 +185,20 @@ func (s *newsletterService) UpdateNewsletter(ctx context.Context, editorID strin
 		return nil, err
 	}
 
+	// First, fetch the newsletter to check for existence and ownership separately.
+	newsletter, err := s.newsletterRepo.GetNewsletterByID(ctx, newsletterID)
+	if err != nil {
+		if errors.Is(err, apperrors.ErrNewsletterNotFound) {
+			return nil, fmt.Errorf("service: UpdateNewsletter: %w", apperrors.ErrNewsletterNotFound)
+		}
+		return nil, fmt.Errorf("service: UpdateNewsletter: checking newsletter existence: %w", err)
+	}
+
+	// Now, check for ownership.
+	if newsletter.EditorID != editor.ID {
+		return nil, fmt.Errorf("service: UpdateNewsletter: %w", apperrors.ErrForbidden)
+	}
+
 	// Validate provided fields before attempting update
 	var namePtr *string
 	if name != nil {
@@ -210,10 +224,8 @@ func (s *newsletterService) UpdateNewsletter(ctx context.Context, editorID strin
 	// Repository atomically handles authorization and update
 	updatedNewsletter, err := s.newsletterRepo.UpdateNewsletter(ctx, newsletterID, editor.ID, namePtr, descPtr)
 	if err != nil {
-		if errors.Is(err, apperrors.ErrNewsletterNotFound) {
-			return nil, fmt.Errorf("service: UpdateNewsletter: %w", apperrors.ErrNewsletterNotFound)
-		}
-		return nil, fmt.Errorf("service: UpdateNewsletter: %w", err)
+		// We already checked for not found, so this would be an unexpected state.
+		return nil, fmt.Errorf("service: UpdateNewsletter: updating repository: %w", err)
 	}
 	return updatedNewsletter, nil
 }
@@ -224,13 +236,25 @@ func (s *newsletterService) DeleteNewsletter(ctx context.Context, editorID strin
 		return err
 	}
 
-	// Repository atomically handles authorization and deletion
-	err = s.newsletterRepo.DeleteNewsletter(ctx, newsletterID, editor.ID)
+	// First, fetch the newsletter to check for existence.
+	newsletter, err := s.newsletterRepo.GetNewsletterByID(ctx, newsletterID)
 	if err != nil {
 		if errors.Is(err, apperrors.ErrNewsletterNotFound) {
 			return fmt.Errorf("service: DeleteNewsletter: %w", apperrors.ErrNewsletterNotFound)
 		}
-		return fmt.Errorf("service: DeleteNewsletter: %w", err)
+		return fmt.Errorf("service: DeleteNewsletter: checking newsletter existence: %w", err)
+	}
+
+	// Now, check for ownership.
+	if newsletter.EditorID != editor.ID {
+		return fmt.Errorf("service: DeleteNewsletter: %w", apperrors.ErrForbidden)
+	}
+
+	// If ownership is verified, proceed with deletion.
+	err = s.newsletterRepo.DeleteNewsletter(ctx, newsletterID, editor.ID)
+	if err != nil {
+		// We already checked for not found, so this would be an unexpected state.
+		return fmt.Errorf("service: DeleteNewsletter: deleting from repository: %w", err)
 	}
 	return nil
 }

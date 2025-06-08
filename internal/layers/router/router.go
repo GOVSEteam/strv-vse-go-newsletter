@@ -3,7 +3,6 @@ package router
 import (
 	"net/http"
 
-	"firebase.google.com/go/v4/auth"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
 	"go.uber.org/zap"
@@ -22,7 +21,7 @@ import (
 // RouterDependencies holds only essential dependencies for the newsletter service.
 type RouterDependencies struct {
 	DB                *pgxpool.Pool
-	FirebaseAuth      *auth.Client
+	AuthClient        middleware.AuthClient
 	NewsletterService service.NewsletterServiceInterface
 	SubscriberService service.SubscriberServiceInterface
 	PublishingService service.PublishingServiceInterface
@@ -67,7 +66,7 @@ func NewRouter(deps RouterDependencies) *chi.Mux {
 
 		// Protected routes
 		r.Group(func(r chi.Router) {
-			r.Use(middleware.AuthMiddleware(deps.FirebaseAuth, deps.EditorRepo))
+			r.Use(middleware.AuthMiddleware(deps.AuthClient, deps.EditorRepo))
 
 			// Newsletter management
 			r.Route("/newsletters", func(r chi.Router) {

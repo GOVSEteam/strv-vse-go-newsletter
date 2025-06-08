@@ -7,6 +7,7 @@ import (
 	"cloud.google.com/go/firestore"
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/auth"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
 	"google.golang.org/api/option"
 )
 
@@ -14,7 +15,7 @@ import (
 // This is the foundation for all other Firebase services.
 func NewFirebaseApp(ctx context.Context, serviceAccountJSON string) (*firebase.App, error) {
 	if serviceAccountJSON == "" {
-		return nil, fmt.Errorf("Firebase service account JSON is required")
+		return nil, fmt.Errorf("firebase service account JSON is required")
 	}
 
 	opt := option.WithCredentialsJSON([]byte(serviceAccountJSON))
@@ -44,4 +45,34 @@ func NewFirestoreClient(ctx context.Context, app *firebase.App) (*firestore.Clie
 		return nil, fmt.Errorf("failed to get Firestore client: %w", err)
 	}
 	return client, nil
+}
+
+// FirebaseAuthAdapter adapts Firebase auth.Client to service.AuthClient interface.
+type FirebaseAuthAdapter struct {
+	client *auth.Client
+}
+
+// NewFirebaseAuthAdapter creates a new Firebase auth adapter for services.
+func NewFirebaseAuthAdapter(client *auth.Client) service.AuthClient {
+	return &FirebaseAuthAdapter{client: client}
+}
+
+// CreateUser creates a new user in Firebase and returns domain types.
+func (a *FirebaseAuthAdapter) CreateUser(ctx context.Context, req service.CreateUserRequest) (*service.CreatedUser, error) {
+	// Convert domain request to Firebase types
+	userToCreate := &auth.UserToCreate{}
+	userToCreate.Email(req.Email)
+	userToCreate.Password(req.Password)
+
+	// Create user in Firebase
+	firebaseUser, err := a.client.CreateUser(ctx, userToCreate)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert Firebase response to domain types
+	return &service.CreatedUser{
+		UID:   firebaseUser.UID,
+		Email: firebaseUser.Email,
+	}, nil
 }
