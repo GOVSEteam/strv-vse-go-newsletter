@@ -29,6 +29,21 @@ paths:
                 type: string
                 example: "OK"
 
+  /openapi.yaml:
+    get:
+      summary: OpenAPI specification
+      description: Returns the OpenAPI specification document for this API
+      tags:
+        - Documentation
+      responses:
+        '200':
+          description: OpenAPI specification
+          content:
+            application/x-yaml:
+              schema:
+                type: string
+                example: "openapi: 3.0.3..."
+
   # Editor Authentication Endpoints
   /api/editor/signup:
     post:
@@ -366,7 +381,7 @@ paths:
         '404':
           description: Post not found
 
-    patch:
+    put:
       summary: Update a post
       description: Update an existing post owned by the authenticated editor
       tags:
@@ -718,7 +733,7 @@ components:
           type: string
           format: uuid
           example: "123e4567-e89b-12d3-a456-426614174000"
-        newsletterId:
+        newsletter_id:
           type: string
           format: uuid
           example: "123e4567-e89b-12d3-a456-426614174000"
@@ -793,7 +808,7 @@ components:
           type: string
           format: email
           example: "subscriber@example.com"
-        newsletterId:
+        newsletter_id:
           type: string
           format: uuid
           example: "123e4567-e89b-12d3-a456-426614174000"
@@ -826,7 +841,7 @@ components:
           type: string
           format: email
           example: "subscriber@example.com"
-        newsletterId:
+        newsletter_id:
           type: string
           format: uuid
           example: "123e4567-e89b-12d3-a456-426614174000"
@@ -870,6 +885,8 @@ components:
 tags:
   - name: Health
     description: Health check endpoints
+  - name: Documentation
+    description: API documentation endpoints
   - name: Authentication
     description: Editor authentication and account management
   - name: Newsletters
