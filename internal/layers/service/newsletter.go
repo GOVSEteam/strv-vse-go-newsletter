@@ -43,40 +43,27 @@ type NewsletterServiceInterface interface {
 type newsletterService struct {
 	newsletterRepo repository.NewsletterRepository
 	postRepo       repository.PostRepository
-	editorRepo     repository.EditorRepository
 }
 
 func NewNewsletterService(
 	newsletterRepo repository.NewsletterRepository,
 	postRepo repository.PostRepository,
-	editorRepo repository.EditorRepository,
 ) NewsletterServiceInterface {
 	return &newsletterService{
 		newsletterRepo: newsletterRepo,
 		postRepo:       postRepo,
-		editorRepo:     editorRepo,
 	}
 }
 
 // --- Authorization Helper ---
 
-// verifyNewsletterOwnershipAndGetEditor retrieves the editor and newsletter,
-// verifies ownership, and returns both if successful.
-func (s *newsletterService) verifyNewsletterOwnershipAndGetEditor(ctx context.Context, editorID string, newsletterID string) (*models.Editor, *models.Newsletter, error) {
-	editor, err := s.editorRepo.GetEditorByID(ctx, editorID) // editorID is the database ID from middleware
-	if err != nil {
-		if errors.Is(err, apperrors.ErrEditorNotFound) {
-			return nil, nil, fmt.Errorf("service: verifyNewsletterOwnership: %w", apperrors.ErrForbidden) // Editor for token not found
-		}
-		return nil, nil, fmt.Errorf("service: verifyNewsletterOwnership: getting editor: %w", err) // Internal error
+// getEditorFromContext retrieves the authenticated editor from context.
+// This eliminates the need for additional database queries.
+func (s *newsletterService) getEditorFromContext(ctx context.Context) (*models.Editor, error) {
+	if editor, ok := ctx.Value("editor").(*models.Editor); ok {
+		return editor, nil
 	}
-
-	newsletter, err := s.verifyNewsletterOwnershipWithEditor(ctx, editor, newsletterID)
-	if err != nil {
-		return nil, nil, err // Already wrapped by verifyNewsletterOwnershipWithEditor
-	}
-	
-	return editor, newsletter, nil
+	return nil, fmt.Errorf("service: getEditorFromContext: %w", apperrors.ErrForbidden)
 }
 
 // verifyNewsletterOwnershipWithEditor verifies newsletter ownership using an already-fetched editor.
@@ -96,48 +83,42 @@ func (s *newsletterService) verifyNewsletterOwnershipWithEditor(ctx context.Cont
 	return newsletter, nil
 }
 
-// verifyPostOwnershipAndGetEditor retrieves the editor and post,
-// then verifies that the editor owns the newsletter to which the post belongs.
-// Returns the editor and post if successful.
-func (s *newsletterService) verifyPostOwnershipAndGetEditor(ctx context.Context, editorID string, postID string) (*models.Editor, *models.Post, error) {
-	editor, err := s.editorRepo.GetEditorByID(ctx, editorID) // editorID is the database ID from middleware
-	if err != nil {
-		if errors.Is(err, apperrors.ErrEditorNotFound) {
-			return nil, nil, fmt.Errorf("service: verifyPostOwnership: %w", apperrors.ErrForbidden) // Editor for token not found
-		}
-		return nil, nil, fmt.Errorf("service: verifyPostOwnership: getting editor: %w", err)
-	}
-
+// verifyPostOwnershipWithEditor verifies post ownership using an already-fetched editor.
+// Returns the post if successful.
+func (s *newsletterService) verifyPostOwnershipWithEditor(ctx context.Context, editor *models.Editor, postID string) (*models.Post, error) {
 	post, err := s.postRepo.GetPostByID(ctx, postID)
 	if err != nil {
 		if errors.Is(err, apperrors.ErrPostNotFound) {
-			return nil, nil, fmt.Errorf("service: verifyPostOwnership: %w", apperrors.ErrPostNotFound)
+			return nil, fmt.Errorf("service: verifyPostOwnership: %w", apperrors.ErrPostNotFound)
 		}
-		return nil, nil, fmt.Errorf("service: verifyPostOwnership: getting post: %w", err)
+		return nil, fmt.Errorf("service: verifyPostOwnership: getting post: %w", err)
 	}
 
 	// Use the already-fetched editor to verify newsletter ownership (no redundant DB call)
 	_, err = s.verifyNewsletterOwnershipWithEditor(ctx, editor, post.NewsletterID)
 	if err != nil {
 		// This will return ErrForbidden if newsletter not owned, or ErrNewsletterNotFound
-		return nil, nil, fmt.Errorf("service: verifyPostOwnership: newsletter ownership check failed: %w", err)
+		return nil, fmt.Errorf("service: verifyPostOwnership: newsletter ownership check failed: %w", err)
 	}
 
-	return editor, post, nil
+	return post, nil
 }
 
 // --- Newsletter Methods ---
 
 func (s *newsletterService) ListNewslettersByEditorID(ctx context.Context, editorID string, limit int, offset int) ([]models.Newsletter, int, error) {
-	// Assuming editorID is the authenticated editor's DB ID, validated by the handler/middleware.
-	// No further ownership check needed here for this specific method's logic.
+	editor, err := s.getEditorFromContext(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+	
 	if limit <= 0 {
 		limit = 10 // Default limit
 	}
 	if offset < 0 {
 		offset = 0 // Default offset
 	}
-	newsletters, total, err := s.newsletterRepo.ListNewslettersByEditorID(ctx, editorID, limit, offset)
+	newsletters, total, err := s.newsletterRepo.ListNewslettersByEditorID(ctx, editor.ID, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("service: ListNewslettersByEditorID: %w", err) // Wrap internal errors
 	}
@@ -145,6 +126,11 @@ func (s *newsletterService) ListNewslettersByEditorID(ctx context.Context, edito
 }
 
 func (s *newsletterService) CreateNewsletter(ctx context.Context, editorID, name, description string) (*models.Newsletter, error) {
+	editor, err := s.getEditorFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	
 	name = strings.TrimSpace(name)
 	description = strings.TrimSpace(description)
 
@@ -158,8 +144,7 @@ func (s *newsletterService) CreateNewsletter(ctx context.Context, editorID, name
 		return nil, fmt.Errorf("service: CreateNewsletter: %w: description exceeds max length of %d", apperrors.ErrValidation, MaxNewsletterDescriptionLength)
 	}
 
-	// editorID is assumed to be the authenticated user's actual database ID.
-	newsletter, err := s.newsletterRepo.CreateNewsletter(ctx, editorID, name, description)
+	newsletter, err := s.newsletterRepo.CreateNewsletter(ctx, editor.ID, name, description)
 	if err != nil {
 		if errors.Is(err, apperrors.ErrConflict) {
 			// Handle unique constraint violation from database
@@ -182,17 +167,25 @@ func (s *newsletterService) GetNewsletterByID(ctx context.Context, newsletterID 
 }
 
 func (s *newsletterService) GetNewsletterForEditor(ctx context.Context, editorID string, newsletterID string) (*models.Newsletter, error) {
-	// editorID is the authenticated editor's database ID from middleware
-	// newsletterID is the ID of the newsletter to fetch.
-	_, newsletter, err := s.verifyNewsletterOwnershipAndGetEditor(ctx, editorID, newsletterID)
+	editor, err := s.getEditorFromContext(ctx)
 	if err != nil {
-		return nil, err // verifyNewsletterOwnershipAndGetEditor already wraps errors appropriately
+		return nil, err
+	}
+	
+	newsletter, err := s.verifyNewsletterOwnershipWithEditor(ctx, editor, newsletterID)
+	if err != nil {
+		return nil, err
 	}
 	return newsletter, nil
 }
 
 func (s *newsletterService) UpdateNewsletter(ctx context.Context, editorID string, newsletterID string, name *string, description *string) (*models.Newsletter, error) {
-	_, newsletter, err := s.verifyNewsletterOwnershipAndGetEditor(ctx, editorID, newsletterID)
+	editor, err := s.getEditorFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	
+	newsletter, err := s.verifyNewsletterOwnershipWithEditor(ctx, editor, newsletterID)
 	if err != nil {
 		return nil, err // Handles ErrForbidden, ErrNewsletterNotFound, or internal errors
 	}
@@ -251,7 +244,12 @@ func (s *newsletterService) UpdateNewsletter(ctx context.Context, editorID strin
 }
 
 func (s *newsletterService) DeleteNewsletter(ctx context.Context, editorID string, newsletterID string) error {
-	_, newsletter, err := s.verifyNewsletterOwnershipAndGetEditor(ctx, editorID, newsletterID)
+	editor, err := s.getEditorFromContext(ctx)
+	if err != nil {
+		return err
+	}
+	
+	newsletter, err := s.verifyNewsletterOwnershipWithEditor(ctx, editor, newsletterID)
 	if err != nil {
 		return err // Handles ErrForbidden, ErrNewsletterNotFound, or internal errors
 	}
@@ -270,7 +268,12 @@ func (s *newsletterService) DeleteNewsletter(ctx context.Context, editorID strin
 // --- Post Methods ---
 
 func (s *newsletterService) CreatePost(ctx context.Context, editorID string, newsletterID string, title string, content string) (*models.Post, error) {
-	_, newsletter, err := s.verifyNewsletterOwnershipAndGetEditor(ctx, editorID, newsletterID)
+	editor, err := s.getEditorFromContext(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("service: CreatePost: authorization failed: %w", err)
+	}
+	
+	newsletter, err := s.verifyNewsletterOwnershipWithEditor(ctx, editor, newsletterID)
 	if err != nil {
 		return nil, fmt.Errorf("service: CreatePost: authorization failed: %w", err)
 	}
@@ -326,11 +329,14 @@ func (s *newsletterService) GetPostByID(ctx context.Context, postID string) (*mo
 }
 
 func (s *newsletterService) GetPostForEditor(ctx context.Context, editorID string, postID string) (*models.Post, error) {
-	// editorID is the authenticated editor's database ID from middleware
-	// postID is the ID of the post to fetch.
-	_, post, err := s.verifyPostOwnershipAndGetEditor(ctx, editorID, postID)
+	editor, err := s.getEditorFromContext(ctx)
 	if err != nil {
-		return nil, err // verifyPostOwnershipAndGetEditor already wraps errors appropriately
+		return nil, err
+	}
+	
+	post, err := s.verifyPostOwnershipWithEditor(ctx, editor, postID)
+	if err != nil {
+		return nil, err
 	}
 	return post, nil
 }
@@ -363,7 +369,12 @@ func (s *newsletterService) ListPostsByNewsletterID(ctx context.Context, newslet
 }
 
 func (s *newsletterService) UpdatePost(ctx context.Context, editorID string, postID string, title *string, content *string) (*models.Post, error) {
-	_, post, err := s.verifyPostOwnershipAndGetEditor(ctx, editorID, postID)
+	editor, err := s.getEditorFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	
+	post, err := s.verifyPostOwnershipWithEditor(ctx, editor, postID)
 	if err != nil {
 		return nil, err
 	}
@@ -428,7 +439,12 @@ func (s *newsletterService) UpdatePost(ctx context.Context, editorID string, pos
 }
 
 func (s *newsletterService) DeletePost(ctx context.Context, editorID string, postID string) error {
-	_, _, err := s.verifyPostOwnershipAndGetEditor(ctx, editorID, postID)
+	editor, err := s.getEditorFromContext(ctx)
+	if err != nil {
+		return err
+	}
+	
+	_, err = s.verifyPostOwnershipWithEditor(ctx, editor, postID)
 	if err != nil {
 		return err
 	}
@@ -444,7 +460,12 @@ func (s *newsletterService) DeletePost(ctx context.Context, editorID string, pos
 }
 
 func (s *newsletterService) PublishPost(ctx context.Context, editorID string, postID string) (*models.Post, error) {
-	_, post, err := s.verifyPostOwnershipAndGetEditor(ctx, editorID, postID)
+	editor, err := s.getEditorFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	
+	post, err := s.verifyPostOwnershipWithEditor(ctx, editor, postID)
 	if err != nil {
 		return nil, err
 	}
@@ -471,7 +492,12 @@ func (s *newsletterService) PublishPost(ctx context.Context, editorID string, po
 }
 
 func (s *newsletterService) UnpublishPost(ctx context.Context, editorID string, postID string) (*models.Post, error) {
-	_, post, err := s.verifyPostOwnershipAndGetEditor(ctx, editorID, postID)
+	editor, err := s.getEditorFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	
+	post, err := s.verifyPostOwnershipWithEditor(ctx, editor, postID)
 	if err != nil {
 		return nil, err
 	}

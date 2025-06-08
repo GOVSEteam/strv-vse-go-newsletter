@@ -97,7 +97,7 @@ func main() {
 		sugar.Fatalf("Error initializing password reset service: %v", err)
 	}
 	editorSvc := service.NewEditorService(editorRepo, firebaseAuthClient, &http.Client{Timeout: 10 * time.Second}, cfg.FirebaseAPIKey)
-	newsletterSvc := service.NewNewsletterService(newsletterRepo, postRepo, editorRepo)
+	newsletterSvc := service.NewNewsletterService(newsletterRepo, postRepo)
 	subscriberSvc := service.NewSubscriberService(subscriberRepo, newsletterRepo, editorRepo, emailService, cfg.AppBaseURL)
 	publishingSvc := service.NewPublishingService(newsletterSvc, subscriberSvc, emailService, cfg)
 
