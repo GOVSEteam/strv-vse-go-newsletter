@@ -57,7 +57,22 @@ func NewRouter(deps RouterDependencies) *chi.Mux {
 
 	// Serve OpenAPI specification
 	r.Get("/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-yaml")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		http.ServeFile(w, r, "docs/openapi.yaml")
+	})
+
+	// Serve Swagger UI
+	r.Get("/swagger", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/swagger/", http.StatusFound)
+	})
+	
+	r.Get("/swagger/", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "static/swagger/index.html")
+	})
+	
+	r.Get("/swagger/index.html", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "static/swagger/index.html")
 	})
 
 	// API routes
