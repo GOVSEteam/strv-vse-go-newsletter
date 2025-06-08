@@ -184,14 +184,9 @@ func (s *newsletterService) UpdateNewsletter(ctx context.Context, editorID strin
 	if err != nil {
 		return nil, err
 	}
-	
-	newsletter, err := s.verifyNewsletterOwnershipWithEditor(ctx, editor, newsletterID)
-	if err != nil {
-		return nil, err // Handles ErrForbidden, ErrNewsletterNotFound, or internal errors
-	}
 
-	// Keep original values if not provided for update
-	updatedName := newsletter.Name
+	// Validate provided fields before attempting update
+	var namePtr *string
 	if name != nil {
 		trimmedName := strings.TrimSpace(*name)
 		if trimmedName == "" {
@@ -200,41 +195,21 @@ func (s *newsletterService) UpdateNewsletter(ctx context.Context, editorID strin
 		if len(trimmedName) > MaxNewsletterNameLength {
 			return nil, fmt.Errorf("service: UpdateNewsletter: %w: name exceeds max length of %d", apperrors.ErrValidation, MaxNewsletterNameLength)
 		}
-
-		updatedName = trimmedName
+		namePtr = &trimmedName
 	}
 
-	updatedDescription := newsletter.Description
+	var descPtr *string
 	if description != nil {
 		trimmedDescription := strings.TrimSpace(*description)
 		if len(trimmedDescription) > MaxNewsletterDescriptionLength {
 			return nil, fmt.Errorf("service: UpdateNewsletter: %w: description exceeds max length of %d", apperrors.ErrValidation, MaxNewsletterDescriptionLength)
 		}
-		updatedDescription = trimmedDescription
-	}
-	
-	// Pass name and description pointers to repository.
-	// The repository will handle actual update if values changed.
-	// Here we pass potentially modified values.
-	var namePtr *string
-	if name != nil { // if user intended to update name
-		namePtr = &updatedName
-	}
-	var descPtr *string
-	if description != nil { // if user intended to update description
-		descPtr = &updatedDescription
+		descPtr = &trimmedDescription
 	}
 
-	// The editorID for the UpdateNewsletter in repo is the true owner ID (newsletter.EditorID)
-	updatedNewsletter, err := s.newsletterRepo.UpdateNewsletter(ctx, newsletterID, newsletter.EditorID, namePtr, descPtr)
+	// Repository atomically handles authorization and update
+	updatedNewsletter, err := s.newsletterRepo.UpdateNewsletter(ctx, newsletterID, editor.ID, namePtr, descPtr)
 	if err != nil {
-		if errors.Is(err, apperrors.ErrConflict) {
-			// Handle unique constraint violation from database
-			if namePtr != nil {
-				return nil, fmt.Errorf("service: UpdateNewsletter: %w: newsletter name '%s' is already taken", apperrors.ErrConflict, *namePtr)
-			}
-			return nil, fmt.Errorf("service: UpdateNewsletter: %w: newsletter name is already taken", apperrors.ErrConflict)
-		}
 		if errors.Is(err, apperrors.ErrNewsletterNotFound) {
 			return nil, fmt.Errorf("service: UpdateNewsletter: %w", apperrors.ErrNewsletterNotFound)
 		}
@@ -248,16 +223,11 @@ func (s *newsletterService) DeleteNewsletter(ctx context.Context, editorID strin
 	if err != nil {
 		return err
 	}
-	
-	newsletter, err := s.verifyNewsletterOwnershipWithEditor(ctx, editor, newsletterID)
-	if err != nil {
-		return err // Handles ErrForbidden, ErrNewsletterNotFound, or internal errors
-	}
 
-	// The editorID for the DeleteNewsletter in repo is the true owner ID (newsletter.EditorID)
-	err = s.newsletterRepo.DeleteNewsletter(ctx, newsletterID, newsletter.EditorID)
+	// Repository atomically handles authorization and deletion
+	err = s.newsletterRepo.DeleteNewsletter(ctx, newsletterID, editor.ID)
 	if err != nil {
-		if errors.Is(err, apperrors.ErrNewsletterNotFound) { // Should not happen if verify found it, but as safeguard
+		if errors.Is(err, apperrors.ErrNewsletterNotFound) {
 			return fmt.Errorf("service: DeleteNewsletter: %w", apperrors.ErrNewsletterNotFound)
 		}
 		return fmt.Errorf("service: DeleteNewsletter: %w", err)
