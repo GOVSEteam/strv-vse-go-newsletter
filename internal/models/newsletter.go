@@ -10,11 +10,11 @@ import (
 // Newsletter represents the domain model for a newsletter
 type Newsletter struct {
 	ID          string    `json:"id"`
-	EditorID    string    `json:"editorId"`
+	EditorID    string    `json:"editor_id"`
 	Name        string    `json:"name"`
 	Description string    `json:"description,omitempty"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // Validate performs business validation on the Newsletter fields

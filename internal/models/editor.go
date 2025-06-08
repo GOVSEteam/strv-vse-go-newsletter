@@ -8,13 +8,13 @@ import (
 	apperrors "github.com/GOVSEteam/strv-vse-go-newsletter/internal/errors"
 )
 
-// Editor represents the domain model for an editor
+// Editor represents the domain model for an editor/user
 type Editor struct {
 	ID          string    `json:"id"`
-	FirebaseUID string    `json:"firebaseUid"`
+	FirebaseUID string    `json:"firebase_uid"`
 	Email       string    `json:"email"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 // Validate performs business validation on the Editor fields

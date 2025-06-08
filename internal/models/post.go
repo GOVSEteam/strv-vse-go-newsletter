@@ -10,12 +10,12 @@ import (
 // Post represents the domain model for a blog post within a newsletter
 type Post struct {
 	ID           string     `json:"id"`
-	NewsletterID string     `json:"newsletterId"`
+	NewsletterID string     `json:"newsletter_id"`
 	Title        string     `json:"title"`
 	Content      string     `json:"content"`
-	PublishedAt  *time.Time `json:"publishedAt,omitempty"` // Pointer for nullability
-	CreatedAt    time.Time  `json:"createdAt"`
-	UpdatedAt    time.Time  `json:"updatedAt"`
+	PublishedAt  *time.Time `json:"published_at,omitempty"` // Pointer for nullability
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
 // Validate performs basic business validation on the Post fields
