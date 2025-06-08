@@ -57,7 +57,16 @@ func NewRouter(deps RouterDependencies) *chi.Mux {
 
 	// Serve OpenAPI specification
 	r.Get("/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-yaml")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		http.ServeFile(w, r, "docs/openapi.yaml")
+	})
+
+	// Redirect to Swagger UI with our OpenAPI spec
+	r.Get("/swagger", func(w http.ResponseWriter, r *http.Request) {
+		specURL := "https://strv-vse-go-newsletter-production.up.railway.app/openapi.yaml"
+		swaggerURL := "https://petstore.swagger.io/?url=" + specURL
+		http.Redirect(w, r, swaggerURL, http.StatusFound)
 	})
 
 	// API routes
