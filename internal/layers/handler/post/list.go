@@ -68,7 +68,7 @@ func ListPostsByNewsletterHandler(svc service.NewsletterServiceInterface) http.H
 			offset = parsedOffset
 		}
 
-		posts, total, err := svc.ListPostsByNewsletterID(r.Context(), newsletterIDStr, limit, offset)
+		posts, total, err := svc.ListPostsByNewsletterID(r.Context(), editorID, newsletterIDStr, limit, offset)
 		if err != nil {
 			commonHandler.JSONErrorSecure(w, err, "post list")
 			return

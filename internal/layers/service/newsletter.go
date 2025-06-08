@@ -33,7 +33,7 @@ type NewsletterServiceInterface interface {
 	CreatePost(ctx context.Context, editorID string, newsletterID string, title string, content string) (*models.Post, error)
 	GetPostByID(ctx context.Context, postID string) (*models.Post, error) // General get, ownership might be checked by caller
 	GetPostForEditor(ctx context.Context, editorID string, postID string) (*models.Post, error) // For editor-specific get with ownership of post's newsletter
-	ListPostsByNewsletterID(ctx context.Context, newsletterID string, limit int, offset int) ([]models.Post, int, error)
+	ListPostsByNewsletterID(ctx context.Context, editorID string, newsletterID string, limit int, offset int) ([]models.Post, int, error)
 	UpdatePost(ctx context.Context, editorID string, postID string, title *string, content *string) (*models.Post, error)
 	DeletePost(ctx context.Context, editorID string, postID string) error
 	PublishPost(ctx context.Context, editorID string, postID string) (*models.Post, error)
@@ -312,16 +312,16 @@ func (s *newsletterService) GetPostForEditor(ctx context.Context, editorID strin
 }
 
 
-func (s *newsletterService) ListPostsByNewsletterID(ctx context.Context, newsletterID string, limit int, offset int) ([]models.Post, int, error) {
-	// Optional: could add an ownership check here if only editor can list posts of their newsletter
-	// For now, assuming it can be public or auth is handled by caller based on context.
-	// First, verify newsletter exists.
-	_, err := s.newsletterRepo.GetNewsletterByID(ctx, newsletterID)
+func (s *newsletterService) ListPostsByNewsletterID(ctx context.Context, editorID string, newsletterID string, limit int, offset int) ([]models.Post, int, error) {
+	editor, err := s.getEditorFromContext(ctx)
 	if err != nil {
-		if errors.Is(err, apperrors.ErrNewsletterNotFound) {
-			return nil, 0, fmt.Errorf("service: ListPostsByNewsletterID: %w", apperrors.ErrNewsletterNotFound)
-		}
-		return nil, 0, fmt.Errorf("service: ListPostsByNewsletterID: checking newsletter: %w", err)
+		return nil, 0, fmt.Errorf("service: ListPostsByNewsletterID: authorization failed: %w", err)
+	}
+
+	// CRITICAL: Verify newsletter ownership before listing posts
+	_, err = s.verifyNewsletterOwnershipWithEditor(ctx, editor, newsletterID)
+	if err != nil {
+		return nil, 0, fmt.Errorf("service: ListPostsByNewsletterID: ownership verification failed: %w", err)
 	}
 
 	if limit <= 0 {
