@@ -88,12 +88,11 @@ func main() {
 	}
 
 	// Initialize Services
-	firebasePasswordResetConfig := service.FirebasePasswordResetServiceConfig{
-		APIKey:     cfg.FirebaseAPIKey,
-		HTTPClient: &http.Client{Timeout: 10 * time.Second},
-		Logger:     zap.NewStdLog(logger),
-	}
-	passwordResetSvc, err := service.NewFirebasePasswordResetService(firebasePasswordResetConfig)
+	passwordResetSvc, err := setup.NewPasswordResetService(
+		cfg.FirebaseAPIKey,
+		&http.Client{Timeout: 10 * time.Second},
+		zap.NewStdLog(logger),
+	)
 	if err != nil {
 		sugar.Fatalf("Error initializing password reset service: %v", err)
 	}
