@@ -445,13 +445,7 @@ func (s *newsletterService) PublishPost(ctx context.Context, editorID string, po
 	}
 
 	now := time.Now().UTC()
-	nowPtr := &now
-	// Use the flexible repository method to update only published_at
-	updates := repository.PostUpdate{
-		PublishedAt: &nowPtr, // Double pointer: pointer to pointer to time
-	}
-	
-	updatedPost, err := s.postRepo.UpdatePost(ctx, postID, updates)
+	updatedPost, err := s.postRepo.SetPostPublished(ctx, postID, now)
 	if err != nil {
 		if errors.Is(err, apperrors.ErrPostNotFound) { // Should not happen
 			return nil, fmt.Errorf("service: PublishPost: %w", apperrors.ErrPostNotFound)
@@ -476,13 +470,7 @@ func (s *newsletterService) UnpublishPost(ctx context.Context, editorID string, 
 		return post, nil // Already unpublished, no action needed
 	}
 
-	// Use the flexible repository method to unpublish (set published_at to nil)
-	var nilTimePtr *time.Time = nil
-	updates := repository.PostUpdate{
-		PublishedAt: &nilTimePtr, // Double pointer: pointer to nil pointer
-	}
-	
-	updatedPost, err := s.postRepo.UpdatePost(ctx, postID, updates)
+	updatedPost, err := s.postRepo.SetPostUnpublished(ctx, postID)
 	if err != nil {
 		if errors.Is(err, apperrors.ErrPostNotFound) {
 			return nil, fmt.Errorf("service: UnpublishPost: %w", apperrors.ErrPostNotFound)
