@@ -75,14 +75,14 @@ func main() {
 	postRepo := repository.NewPostRepository(dbPool)
 	subscriberRepo := repository.NewFirestoreSubscriberRepository(firestoreClient)
 
-	// Initialize Email Service (direct sending)
-	emailServiceConfig := service.GmailEmailServiceConfig{
-		From:     cfg.EmailFrom,
-		Password: cfg.GoogleAppPassword,
-		SMTPHost: cfg.SMTPHost,
-		SMTPPort: cfg.SMTPPort,
-	}
-	emailService, err := service.NewGmailEmailService(emailServiceConfig, zap.NewStdLog(logger))
+	// Initialize Email Service
+	emailService, err := setup.NewGmailEmailService(
+		cfg.EmailFrom,
+		cfg.GoogleAppPassword,
+		cfg.SMTPHost,
+		cfg.SMTPPort,
+		zap.NewStdLog(logger),
+	)
 	if err != nil {
 		sugar.Fatalf("Error initializing email service: %v", err)
 	}
