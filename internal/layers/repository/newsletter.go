@@ -152,27 +152,11 @@ func (r *PostgresNewsletterRepo) GetNewsletterByIDAndEditorID(ctx context.Contex
 	return &model, nil
 }
 
-// UpdateNewsletter updates a newsletter's name and/or description and its updated_at timestamp.
-// It ensures that the update is performed by the owner.
+// UpdateNewsletter updates a newsletter's name and/or description atomically.
+// Uses COALESCE to only update provided fields, eliminating race conditions.
 func (r *PostgresNewsletterRepo) UpdateNewsletter(ctx context.Context, newsletterID string, editorID string, name *string, description *string) (*models.Newsletter, error) {
-	currentNewsletter, err := r.GetNewsletterByIDAndEditorID(ctx, newsletterID, editorID)
-	if err != nil {
-		// GetNewsletterByIDAndEditorID already wraps ErrNoRows to ErrNewsletterNotFound and adds context
-		return nil, fmt.Errorf("newsletter repo: UpdateNewsletter: fetching current: %w", err)
-	}
-
-	updatedName := currentNewsletter.Name
-	if name != nil {
-		updatedName = *name
-	}
-
-	updatedDescription := currentNewsletter.Description
-	if description != nil {
-		updatedDescription = *description
-	}
-
 	var nl dbNewsletter
-	err = r.db.QueryRow(ctx, updateNewsletterQuery, updatedName, updatedDescription, newsletterID, editorID).Scan(
+	err := r.db.QueryRow(ctx, updateNewsletterQuery, name, description, newsletterID, editorID).Scan(
 		&nl.ID, &nl.EditorID, &nl.Name, &nl.Description, &nl.CreatedAt, &nl.UpdatedAt,
 	)
 	if err != nil {
