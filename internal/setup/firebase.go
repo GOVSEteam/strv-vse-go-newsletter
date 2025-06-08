@@ -3,6 +3,8 @@ package setup
 import (
 	"context"
 	"fmt"
+	"log"
+	"net/http"
 
 	"cloud.google.com/go/firestore"
 	firebase "firebase.google.com/go/v4"
@@ -75,4 +77,14 @@ func (a *FirebaseAuthAdapter) CreateUser(ctx context.Context, req service.Create
 		UID:   firebaseUser.UID,
 		Email: firebaseUser.Email,
 	}, nil
+}
+
+// NewPasswordResetService creates a new Firebase password reset service using the provided config values.
+func NewPasswordResetService(apiKey string, httpClient *http.Client, logger *log.Logger) (service.PasswordResetService, error) {
+	config := service.FirebasePasswordResetServiceConfig{
+		APIKey:     apiKey,
+		HTTPClient: httpClient,
+		Logger:     logger,
+	}
+	return service.NewFirebasePasswordResetService(config)
 }
