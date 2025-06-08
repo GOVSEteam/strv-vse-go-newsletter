@@ -1,7 +1,6 @@
 package config
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -103,21 +102,8 @@ func getEnvWithDefault(key, defaultValue string) string {
 	return defaultValue
 }
 
-// getFirebaseServiceAccount returns the Firebase service account JSON.
-// It tries multiple sources in order: file, base64 env var, plain env var.
+// getFirebaseServiceAccount returns the Firebase service account JSON from environment variable.
 func getFirebaseServiceAccount() string {
-	// Try reading from file first (most reliable)
-	if data, err := os.ReadFile("firebase-service-account.json"); err == nil {
-		return string(data)
-	}
-	
-	// Try base64 encoded version
-	if encoded := os.Getenv("FIREBASE_SERVICE_ACCOUNT_BASE64"); encoded != "" {
-		if decoded, err := base64.StdEncoding.DecodeString(encoded); err == nil {
-			return string(decoded)
-		}
-	}
-	
 	// Handle plain JSON from environment variable
 	if plainJSON := os.Getenv("FIREBASE_SERVICE_ACCOUNT"); plainJSON != "" {
 		// First, try to parse the JSON as-is to see if it's already valid
@@ -149,8 +135,7 @@ func getFirebaseServiceAccount() string {
 		// Return the original if nothing worked
 		return plainJSON
 	}
-	
-	return ""
+ 	return ""
 }
 
 // fixFirebaseJSONNewlines fixes JSON that contains unescaped newlines, particularly
@@ -209,3 +194,4 @@ func fixFirebaseJSONNewlines(jsonStr string) string {
 	
 	return result.String()
 } 
+

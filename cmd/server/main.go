@@ -15,6 +15,7 @@ import (
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/router"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/middleware"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/setup"
 
 	_ "github.com/joho/godotenv/autoload"
@@ -96,7 +97,7 @@ func main() {
 	if err != nil {
 		sugar.Fatalf("Error initializing password reset service: %v", err)
 	}
-	editorSvc := service.NewEditorService(editorRepo, firebaseAuthClient, &http.Client{Timeout: 10 * time.Second}, cfg.FirebaseAPIKey)
+	editorSvc := service.NewEditorService(editorRepo, setup.NewFirebaseAuthAdapter(firebaseAuthClient), &http.Client{Timeout: 10 * time.Second}, cfg.FirebaseAPIKey)
 	newsletterSvc := service.NewNewsletterService(newsletterRepo, postRepo)
 	subscriberSvc := service.NewSubscriberService(subscriberRepo, newsletterRepo, editorRepo, emailService, cfg.AppBaseURL)
 	publishingSvc := service.NewPublishingService(newsletterSvc, subscriberSvc, emailService, cfg)
@@ -104,7 +105,7 @@ func main() {
 	// Initialize Router
 	routerDeps := router.RouterDependencies{
 		DB:                dbPool,
-		FirebaseAuth:      firebaseAuthClient,
+		AuthClient:        middleware.NewFirebaseAuthAdapter(firebaseAuthClient),
 		NewsletterService: newsletterSvc,
 		SubscriberService: subscriberSvc,
 		PublishingService: publishingSvc,
