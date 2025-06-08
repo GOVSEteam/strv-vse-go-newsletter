@@ -19,6 +19,7 @@ type EditorRepository interface {
 }
 
 const (
+	EditorContextKey      = "editor"
 	EditorIDContextKey    = "editorID"
 	FirebaseUIDContextKey = "firebaseUID"
 )
@@ -64,12 +65,21 @@ func AuthMiddleware(authClient AuthClient, editorRepo EditorRepository) func(htt
 			}
 
 			// Store in context
-			ctx := context.WithValue(r.Context(), EditorIDContextKey, editor.ID)
+			ctx := context.WithValue(r.Context(), EditorContextKey, editor)
+			ctx = context.WithValue(ctx, EditorIDContextKey, editor.ID)
 			ctx = context.WithValue(ctx, FirebaseUIDContextKey, idToken.UID)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// GetEditorFromContext retrieves the editor from context.
+func GetEditorFromContext(ctx context.Context) (*models.Editor, bool) {
+	if editor, ok := ctx.Value(EditorContextKey).(*models.Editor); ok {
+		return editor, true
+	}
+	return nil, false
 }
 
 // GetEditorIDFromContext retrieves the editor ID from context.
