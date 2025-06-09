@@ -630,18 +630,10 @@ components:
     SignInResponse:
       type: object
       properties:
-        idToken:
+        token:
           type: string
-          description: Firebase ID token
-        refreshToken:
-          type: string
-          description: Firebase refresh token
-        email:
-          type: string
-          format: email
-        localId:
-          type: string
-          description: Firebase user ID
+          description: JWT authentication token
+          example: "eyJhbGciOiJSUzI1NiIsImtpZCI6IjZlODk1YzQ3YTA0YzVmNm..."
 
     Editor:
       type: object

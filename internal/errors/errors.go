@@ -21,37 +21,37 @@ import (
 
 // Standard HTTP errors - these are the base error types
 var (
-	ErrNotFound      = errors.New("not found")
-	ErrUnauthorized  = errors.New("unauthorized")
-	ErrForbidden     = errors.New("forbidden")
-	ErrConflict      = errors.New("conflict")
-	ErrValidation    = errors.New("validation failed")
-	ErrInternal      = errors.New("internal server error")
-	ErrBadRequest    = errors.New("bad request")
+	ErrNotFound      = errors.New("not found") // 404
+	ErrUnauthorized  = errors.New("unauthorized") // 401
+	ErrForbidden     = errors.New("forbidden") // 403
+	ErrConflict      = errors.New("conflict") // 409
+	ErrValidation    = errors.New("validation failed") // 400
+	ErrInternal      = errors.New("internal server error") // 500
+	ErrBadRequest    = errors.New("bad request") // 400
 )
 
 // Domain-specific not found errors - wrap ErrNotFound for specific resources
 var (
-	ErrNewsletterNotFound = fmt.Errorf("%w: newsletter not found", ErrNotFound)
-	ErrEditorNotFound     = fmt.Errorf("%w: editor not found", ErrNotFound)
-	ErrPostNotFound       = fmt.Errorf("%w: post not found", ErrNotFound)
-	ErrSubscriberNotFound = fmt.Errorf("%w: subscriber not found", ErrNotFound)
+	ErrNewsletterNotFound = fmt.Errorf("%w: newsletter not found", ErrNotFound) // 404
+	ErrEditorNotFound     = fmt.Errorf("%w: editor not found", ErrNotFound) // 404
+	ErrPostNotFound       = fmt.Errorf("%w: post not found", ErrNotFound) // 404
+	ErrSubscriberNotFound = fmt.Errorf("%w: subscriber not found", ErrNotFound) // 404
 )
 
 // Validation errors - wrap ErrValidation for specific validation failures
 var (
-	ErrNameEmpty      = fmt.Errorf("%w: name cannot be empty", ErrValidation)
-	ErrInvalidEmail   = fmt.Errorf("%w: invalid email format", ErrValidation)
-	ErrContentTooLong = fmt.Errorf("%w: content is too long", ErrValidation)
-	ErrTokenInvalid   = fmt.Errorf("%w: token is invalid", ErrValidation)
+	ErrNameEmpty      = fmt.Errorf("%w: name cannot be empty", ErrValidation) // 400
+	ErrInvalidEmail   = fmt.Errorf("%w: invalid email format", ErrValidation) // 400
+	ErrContentTooLong = fmt.Errorf("%w: content is too long", ErrValidation) // 400
+	ErrTokenInvalid   = fmt.Errorf("%w: token is invalid", ErrValidation) // 400
 )
 
 // Business logic errors - wrap appropriate base errors for specific business rules
 var (
-	ErrAlreadySubscribed     = fmt.Errorf("%w: already subscribed", ErrConflict)
-	ErrAlreadyConfirmed      = fmt.Errorf("%w: already confirmed", ErrConflict)
-	ErrSubscriptionNotFound  = fmt.Errorf("%w: subscription not found", ErrNotFound)
-	ErrInvalidOrExpiredToken = fmt.Errorf("%w: invalid or expired token", ErrUnauthorized)
+	ErrAlreadySubscribed     = fmt.Errorf("%w: already subscribed", ErrConflict) // 409
+	ErrAlreadyConfirmed      = fmt.Errorf("%w: already confirmed", ErrConflict) // 409
+	ErrSubscriptionNotFound  = fmt.Errorf("%w: subscription not found", ErrNotFound) // 404
+	ErrInvalidOrExpiredToken = fmt.Errorf("%w: invalid or expired token", ErrUnauthorized) // 401
 )
 
 // Error wrapping functions provide consistent error context formatting

@@ -9,6 +9,7 @@ import (
 
 	apperrors "github.com/GOVSEteam/strv-vse-go-newsletter/internal/errors"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/middleware"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models"
 	"github.com/google/uuid"
 )
@@ -60,7 +61,7 @@ func NewNewsletterService(
 // getEditorFromContext retrieves the authenticated editor from context.
 // This eliminates the need for additional database queries.
 func (s *newsletterService) getEditorFromContext(ctx context.Context) (*models.Editor, error) {
-	if editor, ok := ctx.Value("editor").(*models.Editor); ok {
+	if editor, ok := ctx.Value(middleware.EditorContextKey).(*models.Editor); ok {
 		return editor, nil
 	}
 	return nil, fmt.Errorf("service: getEditorFromContext: %w", apperrors.ErrForbidden)

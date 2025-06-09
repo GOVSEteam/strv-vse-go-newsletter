@@ -112,6 +112,7 @@ func main() {
 		PasswordResetSvc:  passwordResetSvc,
 		EditorRepo:        editorRepo,
 		Logger:            sugar,
+		CORSAllowedOrigins: cfg.CORSAllowedOrigins,
 	}
 	mainRouter := router.NewRouter(routerDeps)
 

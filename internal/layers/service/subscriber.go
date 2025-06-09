@@ -11,6 +11,7 @@ import (
 
 	apperrors "github.com/GOVSEteam/strv-vse-go-newsletter/internal/errors"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
+	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/middleware"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models"
 	"github.com/google/uuid"
 )
@@ -124,8 +125,6 @@ func (s *SubscriberService) SubscribeToNewsletter(ctx context.Context, email, ne
 				return nil, fmt.Errorf("service: SubscribeToNewsletter: updating token for reactivated subscriber: %w", err)
 			}
 
-
-
 			// Generate unsubscribe link and extract recipient name
 			unsubscribeLink := fmt.Sprintf("%s/api/v1/subscriptions/unsubscribe/%s", s.appBaseURL, unsubscribeToken)
 			recipientName := email
@@ -180,8 +179,6 @@ func (s *SubscriberService) SubscribeToNewsletter(ctx context.Context, email, ne
 
 	return &subscriber, nil
 }
-
-
 
 // UnsubscribeByToken processes an unsubscription request using a token.
 func (s *SubscriberService) UnsubscribeByToken(ctx context.Context, token string) error {
@@ -247,24 +244,28 @@ func (s *SubscriberService) GetActiveSubscribersForNewsletter(ctx context.Contex
 	return activeSubscribers, nil
 }
 
+// getEditorFromContext retrieves the authenticated editor from context.
+// This eliminates the need for additional database queries and ensures consistency with newsletter service.
+func (s *SubscriberService) getEditorFromContext(ctx context.Context) (*models.Editor, error) {
+	if editor, ok := ctx.Value(middleware.EditorContextKey).(*models.Editor); ok {
+		return editor, nil
+	}
+	return nil, fmt.Errorf("service: getEditorFromContext: %w", apperrors.ErrForbidden)
+}
+
 func (s *SubscriberService) ListActiveSubscribersByNewsletterID(ctx context.Context, editorAuthID string, newsletterID string, limit, offset int) ([]models.Subscriber, int, error) {
 	newsletterID = strings.TrimSpace(newsletterID)
-	editorAuthID = strings.TrimSpace(editorAuthID)
 
 	if newsletterID == "" {
 		return nil, 0, fmt.Errorf("service: ListActiveSubscribers: %w: newsletterID cannot be empty", apperrors.ErrValidation)
 	}
-	if editorAuthID == "" {
-		return nil, 0, fmt.Errorf("service: ListActiveSubscribers: %w: editorAuthID cannot be empty for authorization", apperrors.ErrValidation)
+
+	// Use context-based authorization like newsletter service for consistency
+	editor, err := s.getEditorFromContext(ctx)
+	if err != nil {
+		return nil, 0, fmt.Errorf("service: ListActiveSubscribers: authorization failed: %w", err)
 	}
 
-	editor, err := s.editorRepo.GetEditorByFirebaseUID(ctx, editorAuthID)
-	if err != nil {
-		if errors.Is(err, apperrors.ErrEditorNotFound) {
-			return nil, 0, fmt.Errorf("service: ListActiveSubscribers: %w", apperrors.ErrForbidden)
-		}
-		return nil, 0, fmt.Errorf("service: ListActiveSubscribers: getting editor: %w", err)
-	}
 	retrievedNewsletter, err := s.newsletterRepo.GetNewsletterByID(ctx, newsletterID)
 	if err != nil {
 		if errors.Is(err, apperrors.ErrNewsletterNotFound) {

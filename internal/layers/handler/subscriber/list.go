@@ -33,7 +33,7 @@ func ListSubscribersHandler(subscriberService service.SubscriberServiceInterface
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
-		editorID := middleware.GetFirebaseUIDFromContext(ctx)
+		editorID := middleware.GetEditorIDFromContext(ctx)
 		if editorID == "" {
 			commonHandler.JSONError(w, "Unauthorized", http.StatusUnauthorized)
 			return

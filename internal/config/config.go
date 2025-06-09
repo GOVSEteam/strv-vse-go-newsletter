@@ -32,6 +32,9 @@ type Config struct {
 
 	// Environment
 	RailwayEnvironment string
+
+	// CORS configuration
+	CORSAllowedOrigins []string
 }
 
 // Load reads configuration from environment variables and validates required fields
@@ -59,6 +62,14 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("invalid PORT: %w", err)
 	}
 	config.Port = port
+
+	// Parse CORS allowed origins from environment variable
+	corsOrigins := os.Getenv("CORS_ALLOWED_ORIGINS")
+	if corsOrigins != "" {
+		config.CORSAllowedOrigins = strings.Split(corsOrigins, ",")
+	} else {
+		config.CORSAllowedOrigins = []string{"http://localhost:3000"}
+	}
 
 	// Validate required fields
 	if err := config.validate(); err != nil {
