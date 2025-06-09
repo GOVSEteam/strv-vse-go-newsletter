@@ -1,6 +1,7 @@
 package post_handler
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -32,6 +33,12 @@ func PublishPostHandler(publishingService service.PublishingServiceInterface) ht
 		// It needs the editorID (Firebase UID) for that.
 		err := publishingService.PublishPostToSubscribers(ctx, postIDStr, editorID)
 		if err != nil {
+			if errors.Is(err, service.ErrPostAlreadyPublished) {
+				commonHandler.JSONError(w, err.Error(), http.StatusConflict)
+				return
+			}
+
+			// 500 errors
 			commonHandler.JSONErrorSecure(w, err, "post publish")
 			return
 		}
