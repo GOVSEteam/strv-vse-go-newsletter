@@ -42,17 +42,20 @@ type NewsletterServiceInterface interface {
 }
 
 type newsletterService struct {
-	newsletterRepo repository.NewsletterRepository
-	postRepo       repository.PostRepository
+	newsletterRepo    repository.NewsletterRepository
+	postRepo          repository.PostRepository
+	subscriberService SubscriberServiceInterface
 }
 
 func NewNewsletterService(
 	newsletterRepo repository.NewsletterRepository,
 	postRepo repository.PostRepository,
+	subscriberService SubscriberServiceInterface,
 ) NewsletterServiceInterface {
 	return &newsletterService{
-		newsletterRepo: newsletterRepo,
-		postRepo:       postRepo,
+		newsletterRepo:    newsletterRepo,
+		postRepo:          postRepo,
+		subscriberService: subscriberService,
 	}
 }
 
@@ -251,7 +254,14 @@ func (s *newsletterService) DeleteNewsletter(ctx context.Context, editorID strin
 		return fmt.Errorf("service: DeleteNewsletter: %w", apperrors.ErrForbidden)
 	}
 
-	// If ownership is verified, proceed with deletion.
+	// CRITICAL: Clean up all subscribers before deleting the newsletter
+	// This prevents orphaned subscriber records in Firestore
+	err = s.subscriberService.DeleteAllSubscribersByNewsletterID(ctx, newsletterID)
+	if err != nil {
+		return fmt.Errorf("service: DeleteNewsletter: failed to cleanup subscribers: %w", err)
+	}
+
+	// If ownership is verified and subscribers cleaned up, proceed with deletion.
 	err = s.newsletterRepo.DeleteNewsletter(ctx, newsletterID, editor.ID)
 	if err != nil {
 		// We already checked for not found, so this would be an unexpected state.
