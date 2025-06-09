@@ -126,7 +126,7 @@ func (s *SubscriberService) SubscribeToNewsletter(ctx context.Context, email, ne
 			}
 
 			// Generate unsubscribe link and extract recipient name
-			unsubscribeLink := fmt.Sprintf("%s/api/v1/subscriptions/unsubscribe/%s", s.appBaseURL, unsubscribeToken)
+			unsubscribeLink := fmt.Sprintf("%s/api/subscriptions/unsubscribe?token=%s", s.appBaseURL, unsubscribeToken)
 			recipientName := email
 			if atIndex := strings.Index(email, "@"); atIndex > 0 {
 				recipientName = email[:atIndex]
@@ -160,7 +160,7 @@ func (s *SubscriberService) SubscribeToNewsletter(ctx context.Context, email, ne
 	subscriber.ID = subscriberIDVal
 
 	// Generate unsubscribe link and extract recipient name
-	unsubscribeLink := fmt.Sprintf("%s/api/v1/subscriptions/unsubscribe/%s", s.appBaseURL, unsubscribeToken)
+	unsubscribeLink := fmt.Sprintf("%s/api/subscriptions/unsubscribe?token=%s", s.appBaseURL, unsubscribeToken)
 	recipientName := email
 	if atIndex := strings.Index(email, "@"); atIndex > 0 {
 		recipientName = email[:atIndex]
