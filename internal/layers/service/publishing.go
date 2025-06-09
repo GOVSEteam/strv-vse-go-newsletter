@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -24,6 +25,9 @@ type PublishingService struct {
 	emailService      EmailService               // For direct email sending
 	config            *config.Config             // Application configuration
 }
+
+// Errors
+var ErrPostAlreadyPublished = errors.New("post already published")
 
 // NewPublishingService creates a new PublishingService.
 func NewPublishingService(
@@ -60,7 +64,7 @@ func (s *PublishingService) PublishPostToSubscribers(ctx context.Context, postID
 		if pubErr != nil {
 			return fmt.Errorf("failed to confirm already published post %s for editor %s: %w", postID, editorFirebaseUID, pubErr)
 		}
-		return nil // Or a specific error like apperrors.ErrConflict with message "post already published"
+		return ErrPostAlreadyPublished
 	}
 
 	// 2. Get active subscribers for the newsletter
