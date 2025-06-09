@@ -29,6 +29,7 @@ type RouterDependencies struct {
 	PasswordResetSvc  service.PasswordResetService
 	EditorRepo        repository.EditorRepository
 	Logger            *zap.SugaredLogger
+	CORSAllowedOrigins []string
 }
 
 // NewRouter creates a simple Chi router for the newsletter service.
@@ -39,7 +40,7 @@ func NewRouter(deps RouterDependencies) *chi.Mux {
 	r.Use(middleware.LoggingMiddleware(deps.Logger))
 	r.Use(middleware.RecoveryMiddleware(deps.Logger))
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:3000", "https://yourdomain.com"}, // Specific origins
+		AllowedOrigins:   deps.CORSAllowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
 		AllowCredentials: true,

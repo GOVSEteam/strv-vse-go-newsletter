@@ -110,7 +110,7 @@
 								"exec": [
 									"if (pm.response.code === 200) {",
 									"    const response = pm.response.json();",
-									"    pm.collectionVariables.set('authToken', response.idToken);",
+									"    pm.collectionVariables.set('authToken', response.token);",
 									"    console.log('Auth token saved');",
 									"}"
 								],

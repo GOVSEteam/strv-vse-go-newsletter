@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
+	"cloud.google.com/go/firestore/apiv1/firestorepb"
 	apperrors "github.com/GOVSEteam/strv-vse-go-newsletter/internal/errors"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models"
 	"google.golang.org/api/iterator"
@@ -121,7 +122,20 @@ func (r *firestoreSubscriberRepository) ListSubscribersByNewsletterID(ctx contex
 	if !ok {
 		return nil, 0, fmt.Errorf("subscriber repo: ListSubscribersByNewsletterID: count aggregation did not return 'all' field: %w", apperrors.ErrInternal)
 	}
-	totalCount := int(countValue.(int64))
+	
+	// Handle Firestore aggregation result properly
+	var totalCount int
+	if countResult, ok := countValue.(*firestorepb.Value); ok {
+		if countResult.GetIntegerValue() != 0 {
+			totalCount = int(countResult.GetIntegerValue())
+		} else {
+			totalCount = 0
+		}
+	} else if countInt, ok := countValue.(int64); ok {
+		totalCount = int(countInt)
+	} else {
+		return nil, 0, fmt.Errorf("subscriber repo: ListSubscribersByNewsletterID: unexpected count value type: %T", countValue)
+	}
 
 	// Get paginated list
 	// Note: For now we'll remove OrderBy to avoid composite index requirement
@@ -170,7 +184,20 @@ func (r *firestoreSubscriberRepository) ListActiveSubscribersByNewsletterID(ctx 
 	if !ok {
 		return nil, 0, fmt.Errorf("subscriber repo: ListActiveSubscribersByNewsletterID: count aggregation did not return 'all' field: %w", apperrors.ErrInternal)
 	}
-	totalCount := int(countValue.(int64))
+	
+	// Handle Firestore aggregation result properly
+	var totalCount int
+	if countResult, ok := countValue.(*firestorepb.Value); ok {
+		if countResult.GetIntegerValue() != 0 {
+			totalCount = int(countResult.GetIntegerValue())
+		} else {
+			totalCount = 0
+		}
+	} else if countInt, ok := countValue.(int64); ok {
+		totalCount = int(countInt)
+	} else {
+		return nil, 0, fmt.Errorf("subscriber repo: ListActiveSubscribersByNewsletterID: unexpected count value type: %T", countValue)
+	}
 
 	// Get paginated list of ACTIVE subscribers only
 	// Note: For now we'll remove OrderBy to avoid composite index requirement
