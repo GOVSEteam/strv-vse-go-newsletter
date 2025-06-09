@@ -35,6 +35,7 @@ type SubscriberServiceInterface interface {
 	UnsubscribeByToken(ctx context.Context, token string) error
 	ListActiveSubscribersByNewsletterID(ctx context.Context, editorAuthID string, newsletterID string, limit, offset int) ([]models.Subscriber, int, error)
 	GetActiveSubscribersForNewsletter(ctx context.Context, newsletterID string) ([]models.Subscriber, error)
+	DeleteAllSubscribersByNewsletterID(ctx context.Context, newsletterID string) error
 }
 
 // SubscriberService manages subscriber operations for newsletters.
@@ -290,4 +291,21 @@ func (s *SubscriberService) ListActiveSubscribersByNewsletterID(ctx context.Cont
 	}
 
 	return activeSubscribers, totalActiveCount, nil
+}
+
+// DeleteAllSubscribersByNewsletterID removes all subscribers for a newsletter when the newsletter is deleted.
+// This is used for cleanup during newsletter deletion to prevent orphaned subscriber records.
+func (s *SubscriberService) DeleteAllSubscribersByNewsletterID(ctx context.Context, newsletterID string) error {
+	if newsletterID == "" {
+		return fmt.Errorf("service: DeleteAllSubscribersByNewsletterID: %w: newsletterID cannot be empty", apperrors.ErrValidation)
+	}
+
+	// Get all subscribers for the newsletter (both active and unsubscribed)
+	// We need to delete all records, not just active ones
+	err := s.subscriberRepo.DeleteAllSubscribersByNewsletterID(ctx, newsletterID)
+	if err != nil {
+		return fmt.Errorf("service: DeleteAllSubscribersByNewsletterID: failed to delete subscribers for newsletter %s: %w", newsletterID, err)
+	}
+
+	return nil
 }

@@ -61,6 +61,7 @@ type SubscriberRepository interface {
 	UpdateSubscriberStatus(ctx context.Context, subscriberID string, status models.SubscriberStatus) error
 	UpdateSubscriberUnsubscribeToken(ctx context.Context, subscriberID string, newToken string) error
 	GetSubscriberByUnsubscribeToken(ctx context.Context, token string) (*models.Subscriber, error)
+	DeleteAllSubscribersByNewsletterID(ctx context.Context, newsletterID string) error
 }
 
 // firestoreSubscriberRepository implements SubscriberRepository using Firestore.
@@ -313,4 +314,23 @@ func (r *firestoreSubscriberRepository) GetSubscriberByUnsubscribeToken(ctx cont
 	}
 	modelSub := dbSub.toDomain(doc.Ref.ID)
 	return &modelSub, nil
+}
+
+func (r *firestoreSubscriberRepository) DeleteAllSubscribersByNewsletterID(ctx context.Context, newsletterID string) error {
+	iter := r.client.Collection(subscribersCollection).Where("newsletter_id", "==", newsletterID).Documents(ctx)
+	defer iter.Stop()
+
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("subscriber repo: DeleteAllSubscribersByNewsletterID: iterate: %w: %v", apperrors.ErrInternal, err)
+		}
+		if _, err := doc.Ref.Delete(ctx); err != nil {
+			return fmt.Errorf("subscriber repo: DeleteAllSubscribersByNewsletterID: delete: %w: %v", apperrors.ErrInternal, err)
+		}
+	}
+	return nil
 }

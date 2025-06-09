@@ -124,13 +124,46 @@ func (m *MockPostRepository) DeletePost(ctx context.Context, postID string) erro
 	return args.Error(0)
 }
 
+// MockSubscriberService mocks the subscriber service
+type MockSubscriberService struct {
+	mock.Mock
+}
+
+func (m *MockSubscriberService) SubscribeToNewsletter(ctx context.Context, email, newsletterID string) (*models.Subscriber, error) {
+	args := m.Called(ctx, email, newsletterID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Subscriber), args.Error(1)
+}
+
+func (m *MockSubscriberService) UnsubscribeByToken(ctx context.Context, token string) error {
+	args := m.Called(ctx, token)
+	return args.Error(0)
+}
+
+func (m *MockSubscriberService) ListActiveSubscribersByNewsletterID(ctx context.Context, editorAuthID string, newsletterID string, limit, offset int) ([]models.Subscriber, int, error) {
+	args := m.Called(ctx, editorAuthID, newsletterID, limit, offset)
+	return args.Get(0).([]models.Subscriber), args.Get(1).(int), args.Error(2)
+}
+
+func (m *MockSubscriberService) GetActiveSubscribersForNewsletter(ctx context.Context, newsletterID string) ([]models.Subscriber, error) {
+	args := m.Called(ctx, newsletterID)
+	return args.Get(0).([]models.Subscriber), args.Error(1)
+}
+
+func (m *MockSubscriberService) DeleteAllSubscribersByNewsletterID(ctx context.Context, newsletterID string) error {
+	args := m.Called(ctx, newsletterID)
+	return args.Error(0)
+}
+
 func TestNewsletterService_CreateNewsletter(t *testing.T) {
 	tests := []struct {
 		name           string
 		editorID       string
 		newsletterName string
 		description    string
-		setupMocks     func(*MockNewsletterRepository, *MockPostRepository)
+		setupMocks     func(*MockNewsletterRepository, *MockPostRepository, *MockSubscriberService)
 		setupContext   func() context.Context
 		expectedError  string
 		expectSuccess  bool
@@ -140,7 +173,7 @@ func TestNewsletterService_CreateNewsletter(t *testing.T) {
 			editorID:       "editor_123",
 			newsletterName: "Tech Weekly",
 			description:    "Weekly tech updates",
-			setupMocks: func(mockRepo *MockNewsletterRepository, mockPostRepo *MockPostRepository) {
+			setupMocks: func(mockRepo *MockNewsletterRepository, mockPostRepo *MockPostRepository, mockSubService *MockSubscriberService) {
 				expectedNewsletter := &models.Newsletter{
 					ID:          "newsletter_456",
 					EditorID:    "editor_123",
@@ -168,7 +201,7 @@ func TestNewsletterService_CreateNewsletter(t *testing.T) {
 			editorID:       "editor_123",
 			newsletterName: "",
 			description:    "Some description",
-			setupMocks: func(mockRepo *MockNewsletterRepository, mockPostRepo *MockPostRepository) {
+			setupMocks: func(mockRepo *MockNewsletterRepository, mockPostRepo *MockPostRepository, mockSubService *MockSubscriberService) {
 				// No repository calls expected due to validation failure
 			},
 			setupContext: func() context.Context {
@@ -183,7 +216,7 @@ func TestNewsletterService_CreateNewsletter(t *testing.T) {
 			editorID:       "editor_123",
 			newsletterName: "This is a very long newsletter name that exceeds the maximum allowed length for a newsletter name in our system",
 			description:    "Description",
-			setupMocks: func(mockRepo *MockNewsletterRepository, mockPostRepo *MockPostRepository) {
+			setupMocks: func(mockRepo *MockNewsletterRepository, mockPostRepo *MockPostRepository, mockSubService *MockSubscriberService) {
 				// No repository calls expected due to validation failure
 			},
 			setupContext: func() context.Context {
@@ -198,7 +231,7 @@ func TestNewsletterService_CreateNewsletter(t *testing.T) {
 			editorID:       "editor_123",
 			newsletterName: "Tech Weekly",
 			description:    "Description",
-			setupMocks: func(mockRepo *MockNewsletterRepository, mockPostRepo *MockPostRepository) {
+			setupMocks: func(mockRepo *MockNewsletterRepository, mockPostRepo *MockPostRepository, mockSubService *MockSubscriberService) {
 				// No repository calls expected due to authorization failure
 			},
 			setupContext: func() context.Context {
@@ -212,7 +245,7 @@ func TestNewsletterService_CreateNewsletter(t *testing.T) {
 			editorID:       "editor_123",
 			newsletterName: "Existing Newsletter",
 			description:    "Description",
-			setupMocks: func(mockRepo *MockNewsletterRepository, mockPostRepo *MockPostRepository) {
+			setupMocks: func(mockRepo *MockNewsletterRepository, mockPostRepo *MockPostRepository, mockSubService *MockSubscriberService) {
 				mockRepo.On("CreateNewsletter", mock.Anything, "editor_123", "Existing Newsletter", "Description").
 					Return(nil, apperrors.ErrConflict)
 			},
@@ -230,10 +263,11 @@ func TestNewsletterService_CreateNewsletter(t *testing.T) {
 			// Setup mocks
 			mockNewsletterRepo := &MockNewsletterRepository{}
 			mockPostRepo := &MockPostRepository{}
-			tt.setupMocks(mockNewsletterRepo, mockPostRepo)
+			mockSubService := &MockSubscriberService{}
+			tt.setupMocks(mockNewsletterRepo, mockPostRepo, mockSubService)
 
 			// Create service
-			service := NewNewsletterService(mockNewsletterRepo, mockPostRepo)
+			service := NewNewsletterService(mockNewsletterRepo, mockPostRepo, mockSubService)
 
 			// Setup context
 			ctx := tt.setupContext()
@@ -256,6 +290,7 @@ func TestNewsletterService_CreateNewsletter(t *testing.T) {
 			// Verify mock expectations
 			mockNewsletterRepo.AssertExpectations(t)
 			mockPostRepo.AssertExpectations(t)
+			mockSubService.AssertExpectations(t)
 		})
 	}
 }
@@ -264,7 +299,7 @@ func TestNewsletterService_GetNewsletterForEditor(t *testing.T) {
 	tests := []struct {
 		name          string
 		newsletterID  string
-		setupMocks    func(*MockNewsletterRepository, *MockPostRepository)
+		setupMocks    func(*MockNewsletterRepository, *MockPostRepository, *MockSubscriberService)
 		setupContext  func() context.Context
 		expectedError string
 		expectSuccess bool
@@ -272,7 +307,7 @@ func TestNewsletterService_GetNewsletterForEditor(t *testing.T) {
 		{
 			name:         "successful get newsletter",
 			newsletterID: "newsletter_123",
-			setupMocks: func(mockRepo *MockNewsletterRepository, mockPostRepo *MockPostRepository) {
+			setupMocks: func(mockRepo *MockNewsletterRepository, mockPostRepo *MockPostRepository, mockSubService *MockSubscriberService) {
 				expectedNewsletter := &models.Newsletter{
 					ID:       "newsletter_123",
 					EditorID: "editor_456",
@@ -290,7 +325,7 @@ func TestNewsletterService_GetNewsletterForEditor(t *testing.T) {
 		{
 			name:         "newsletter not found",
 			newsletterID: "nonexistent_newsletter",
-			setupMocks: func(mockRepo *MockNewsletterRepository, mockPostRepo *MockPostRepository) {
+			setupMocks: func(mockRepo *MockNewsletterRepository, mockPostRepo *MockPostRepository, mockSubService *MockSubscriberService) {
 				mockRepo.On("GetNewsletterByID", mock.Anything, "nonexistent_newsletter").
 					Return(nil, apperrors.ErrNewsletterNotFound)
 			},
@@ -304,7 +339,7 @@ func TestNewsletterService_GetNewsletterForEditor(t *testing.T) {
 		{
 			name:         "editor doesn't own newsletter",
 			newsletterID: "newsletter_123",
-			setupMocks: func(mockRepo *MockNewsletterRepository, mockPostRepo *MockPostRepository) {
+			setupMocks: func(mockRepo *MockNewsletterRepository, mockPostRepo *MockPostRepository, mockSubService *MockSubscriberService) {
 				newsletter := &models.Newsletter{
 					ID:       "newsletter_123",
 					EditorID: "different_editor", // Different owner
@@ -327,10 +362,11 @@ func TestNewsletterService_GetNewsletterForEditor(t *testing.T) {
 			// Setup mocks
 			mockNewsletterRepo := &MockNewsletterRepository{}
 			mockPostRepo := &MockPostRepository{}
-			tt.setupMocks(mockNewsletterRepo, mockPostRepo)
+			mockSubService := &MockSubscriberService{}
+			tt.setupMocks(mockNewsletterRepo, mockPostRepo, mockSubService)
 
 			// Create service
-			service := NewNewsletterService(mockNewsletterRepo, mockPostRepo)
+			service := NewNewsletterService(mockNewsletterRepo, mockPostRepo, mockSubService)
 
 			// Setup context
 			ctx := tt.setupContext()
@@ -352,6 +388,132 @@ func TestNewsletterService_GetNewsletterForEditor(t *testing.T) {
 			// Verify mock expectations
 			mockNewsletterRepo.AssertExpectations(t)
 			mockPostRepo.AssertExpectations(t)
+			mockSubService.AssertExpectations(t)
+		})
+	}
+}
+
+func TestNewsletterService_DeleteNewsletter(t *testing.T) {
+	tests := []struct {
+		name          string
+		newsletterID  string
+		setupMocks    func(*MockNewsletterRepository, *MockPostRepository, *MockSubscriberService)
+		setupContext  func() context.Context
+		expectedError string
+		expectSuccess bool
+	}{
+		{
+			name:         "successful newsletter deletion with subscriber cleanup",
+			newsletterID: "newsletter_123",
+			setupMocks: func(mockRepo *MockNewsletterRepository, mockPostRepo *MockPostRepository, mockSubService *MockSubscriberService) {
+				newsletter := &models.Newsletter{
+					ID:       "newsletter_123",
+					EditorID: "editor_456",
+					Name:     "Tech Newsletter",
+				}
+				// First call to check existence and ownership
+				mockRepo.On("GetNewsletterByID", mock.Anything, "newsletter_123").
+					Return(newsletter, nil)
+				// Subscriber cleanup should be called before deletion
+				mockSubService.On("DeleteAllSubscribersByNewsletterID", mock.Anything, "newsletter_123").
+					Return(nil)
+				// Finally delete the newsletter
+				mockRepo.On("DeleteNewsletter", mock.Anything, "newsletter_123", "editor_456").
+					Return(nil)
+			},
+			setupContext: func() context.Context {
+				editor := &models.Editor{ID: "editor_456"}
+				return context.WithValue(context.Background(), middleware.EditorContextKey, editor)
+			},
+			expectSuccess: true,
+		},
+		{
+			name:         "newsletter not found",
+			newsletterID: "nonexistent_newsletter",
+			setupMocks: func(mockRepo *MockNewsletterRepository, mockPostRepo *MockPostRepository, mockSubService *MockSubscriberService) {
+				mockRepo.On("GetNewsletterByID", mock.Anything, "nonexistent_newsletter").
+					Return(nil, apperrors.ErrNewsletterNotFound)
+			},
+			setupContext: func() context.Context {
+				editor := &models.Editor{ID: "editor_456"}
+				return context.WithValue(context.Background(), middleware.EditorContextKey, editor)
+			},
+			expectedError: "newsletter not found",
+			expectSuccess: false,
+		},
+		{
+			name:         "editor doesn't own newsletter",
+			newsletterID: "newsletter_123",
+			setupMocks: func(mockRepo *MockNewsletterRepository, mockPostRepo *MockPostRepository, mockSubService *MockSubscriberService) {
+				newsletter := &models.Newsletter{
+					ID:       "newsletter_123",
+					EditorID: "different_editor", // Different owner
+					Name:     "Someone Else's Newsletter",
+				}
+				mockRepo.On("GetNewsletterByID", mock.Anything, "newsletter_123").
+					Return(newsletter, nil)
+			},
+			setupContext: func() context.Context {
+				editor := &models.Editor{ID: "editor_456"}
+				return context.WithValue(context.Background(), middleware.EditorContextKey, editor)
+			},
+			expectedError: "forbidden",
+			expectSuccess: false,
+		},
+		{
+			name:         "subscriber cleanup fails",
+			newsletterID: "newsletter_123",
+			setupMocks: func(mockRepo *MockNewsletterRepository, mockPostRepo *MockPostRepository, mockSubService *MockSubscriberService) {
+				newsletter := &models.Newsletter{
+					ID:       "newsletter_123",
+					EditorID: "editor_456",
+					Name:     "Tech Newsletter",
+				}
+				mockRepo.On("GetNewsletterByID", mock.Anything, "newsletter_123").
+					Return(newsletter, nil)
+				// Subscriber cleanup fails
+				mockSubService.On("DeleteAllSubscribersByNewsletterID", mock.Anything, "newsletter_123").
+					Return(apperrors.ErrInternal)
+				// Newsletter deletion should not be called if subscriber cleanup fails
+			},
+			setupContext: func() context.Context {
+				editor := &models.Editor{ID: "editor_456"}
+				return context.WithValue(context.Background(), middleware.EditorContextKey, editor)
+			},
+			expectedError: "failed to cleanup subscribers",
+			expectSuccess: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup mocks
+			mockNewsletterRepo := &MockNewsletterRepository{}
+			mockPostRepo := &MockPostRepository{}
+			mockSubService := &MockSubscriberService{}
+			tt.setupMocks(mockNewsletterRepo, mockPostRepo, mockSubService)
+
+			// Create service
+			service := NewNewsletterService(mockNewsletterRepo, mockPostRepo, mockSubService)
+
+			// Setup context
+			ctx := tt.setupContext()
+
+			// Execute
+			err := service.DeleteNewsletter(ctx, "editor_456", tt.newsletterID)
+
+			// Verify
+			if tt.expectSuccess {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError)
+			}
+
+			// Verify mock expectations
+			mockNewsletterRepo.AssertExpectations(t)
+			mockPostRepo.AssertExpectations(t)
+			mockSubService.AssertExpectations(t)
 		})
 	}
 } 
