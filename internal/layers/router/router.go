@@ -7,6 +7,8 @@ import (
 	"github.com/go-chi/cors"
 	"go.uber.org/zap"
 
+	"database/sql"
+
 	editorHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/editor"
 	newsletterHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/newsletter"
 	postHandler "github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/handler/post"
@@ -14,13 +16,11 @@ import (
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/repository"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/layers/service"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/middleware"
-
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // RouterDependencies holds only essential dependencies for the newsletter service.
 type RouterDependencies struct {
-	DB                *pgxpool.Pool
+	DB                *sql.DB
 	AuthClient        middleware.AuthClient
 	NewsletterService service.NewsletterServiceInterface
 	SubscriberService service.SubscriberServiceInterface
@@ -49,7 +49,7 @@ func NewRouter(deps RouterDependencies) *chi.Mux {
 
 	// Simple health check
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		if err := deps.DB.Ping(r.Context()); err != nil {
+		if err := deps.DB.PingContext(r.Context()); err != nil {
 			http.Error(w, "Database unavailable", http.StatusServiceUnavailable)
 			return
 		}

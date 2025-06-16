@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"time"
 
+	"database/sql"
+
 	"github.com/jackc/pgerrcode" // For pg error codes
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 
 	apperrors "github.com/GOVSEteam/strv-vse-go-newsletter/internal/errors"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models"
@@ -76,17 +76,17 @@ type NewsletterRepository interface {
 
 // PostgresNewsletterRepo is the PostgreSQL implementation of NewsletterRepository.
 type PostgresNewsletterRepo struct {
-	db *pgxpool.Pool
+	db *sql.DB
 }
 
 // NewPostgresNewsletterRepo creates a new PostgresNewsletterRepo.
-func NewPostgresNewsletterRepo(db *pgxpool.Pool) NewsletterRepository {
+func NewPostgresNewsletterRepo(db *sql.DB) NewsletterRepository {
 	return &PostgresNewsletterRepo{db: db}
 }
 
 // ListNewslettersByEditorID fetches a paginated list of newsletters for a specific editor.
 func (r *PostgresNewsletterRepo) ListNewslettersByEditorID(ctx context.Context, editorID string, limit int, offset int) ([]models.Newsletter, int, error) {
-	rows, err := r.db.Query(ctx, listNewslettersByEditorIDQuery, editorID, limit, offset)
+	rows, err := r.db.QueryContext(ctx, listNewslettersByEditorIDQuery, editorID, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("newsletter repo: ListNewslettersByEditorID: query: %w", err)
 	}
@@ -110,7 +110,7 @@ func (r *PostgresNewsletterRepo) ListNewslettersByEditorID(ctx context.Context, 
 	}
 
 	var totalCount int
-	err = r.db.QueryRow(ctx, countNewslettersByEditorIDQuery, editorID).Scan(&totalCount)
+	err = r.db.QueryRowContext(ctx, countNewslettersByEditorIDQuery, editorID).Scan(&totalCount)
 	if err != nil {
 		// Return already fetched newsletters if count fails, but log or wrap error appropriately.
 		return newsletters, 0, fmt.Errorf("newsletter repo: ListNewslettersByEditorID: count query: %w", err)
@@ -122,7 +122,7 @@ func (r *PostgresNewsletterRepo) ListNewslettersByEditorID(ctx context.Context, 
 // CreateNewsletter creates a new newsletter.
 func (r *PostgresNewsletterRepo) CreateNewsletter(ctx context.Context, editorID, name, description string) (*models.Newsletter, error) {
 	var nl dbNewsletter
-	err := r.db.QueryRow(ctx, createNewsletterQuery, editorID, name, description).Scan(
+	err := r.db.QueryRowContext(ctx, createNewsletterQuery, editorID, name, description).Scan(
 		&nl.ID, &nl.EditorID, &nl.Name, &nl.Description, &nl.CreatedAt, &nl.UpdatedAt,
 	)
 	if err != nil {
@@ -139,11 +139,11 @@ func (r *PostgresNewsletterRepo) CreateNewsletter(ctx context.Context, editorID,
 // GetNewsletterByIDAndEditorID fetches a newsletter by its ID and verifies editor ownership.
 func (r *PostgresNewsletterRepo) GetNewsletterByIDAndEditorID(ctx context.Context, newsletterID string, editorID string) (*models.Newsletter, error) {
 	var nl dbNewsletter
-	err := r.db.QueryRow(ctx, getNewsletterByIDAndEditorIDQuery, newsletterID, editorID).Scan(
+	err := r.db.QueryRowContext(ctx, getNewsletterByIDAndEditorIDQuery, newsletterID, editorID).Scan(
 		&nl.ID, &nl.EditorID, &nl.Name, &nl.Description, &nl.CreatedAt, &nl.UpdatedAt,
 	)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("newsletter repo: GetNewsletterByIDAndEditorID: %w", apperrors.ErrNewsletterNotFound)
 		}
 		return nil, fmt.Errorf("newsletter repo: GetNewsletterByIDAndEditorID: scan: %w", err)
@@ -156,11 +156,11 @@ func (r *PostgresNewsletterRepo) GetNewsletterByIDAndEditorID(ctx context.Contex
 // Uses COALESCE to only update provided fields, eliminating race conditions.
 func (r *PostgresNewsletterRepo) UpdateNewsletter(ctx context.Context, newsletterID string, editorID string, name *string, description *string) (*models.Newsletter, error) {
 	var nl dbNewsletter
-	err := r.db.QueryRow(ctx, updateNewsletterQuery, name, description, newsletterID, editorID).Scan(
+	err := r.db.QueryRowContext(ctx, updateNewsletterQuery, name, description, newsletterID, editorID).Scan(
 		&nl.ID, &nl.EditorID, &nl.Name, &nl.Description, &nl.CreatedAt, &nl.UpdatedAt,
 	)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("newsletter repo: UpdateNewsletter: %w", apperrors.ErrNewsletterNotFound)
 		}
 		return nil, fmt.Errorf("newsletter repo: UpdateNewsletter: scan: %w", err)
@@ -171,11 +171,17 @@ func (r *PostgresNewsletterRepo) UpdateNewsletter(ctx context.Context, newslette
 
 // DeleteNewsletter removes a newsletter by its ID, ensuring it belongs to the editor.
 func (r *PostgresNewsletterRepo) DeleteNewsletter(ctx context.Context, newsletterID string, editorID string) error {
-	cmdTag, err := r.db.Exec(ctx, deleteNewsletterQuery, newsletterID, editorID)
+	cmdTag, err := r.db.ExecContext(ctx, deleteNewsletterQuery, newsletterID, editorID)
 	if err != nil {
 		return fmt.Errorf("newsletter repo: DeleteNewsletter: exec: %w", err)
 	}
-	if cmdTag.RowsAffected() == 0 {
+
+	rowsAffected, err := cmdTag.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("newsletter repo: DeleteNewsletter: checking rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
 		return fmt.Errorf("newsletter repo: DeleteNewsletter: %w", apperrors.ErrNewsletterNotFound)
 	}
 	return nil
@@ -184,11 +190,11 @@ func (r *PostgresNewsletterRepo) DeleteNewsletter(ctx context.Context, newslette
 // GetNewsletterByNameAndEditorID fetches a newsletter by its name and editor ID.
 func (r *PostgresNewsletterRepo) GetNewsletterByNameAndEditorID(ctx context.Context, name string, editorID string) (*models.Newsletter, error) {
 	var nl dbNewsletter
-	err := r.db.QueryRow(ctx, getNewsletterByNameAndEditorIDQuery, name, editorID).Scan(
+	err := r.db.QueryRowContext(ctx, getNewsletterByNameAndEditorIDQuery, name, editorID).Scan(
 		&nl.ID, &nl.EditorID, &nl.Name, &nl.Description, &nl.CreatedAt, &nl.UpdatedAt,
 	)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("newsletter repo: GetNewsletterByNameAndEditorID: %w", apperrors.ErrNewsletterNotFound)
 		}
 		return nil, fmt.Errorf("newsletter repo: GetNewsletterByNameAndEditorID: scan: %w", err)
@@ -200,11 +206,11 @@ func (r *PostgresNewsletterRepo) GetNewsletterByNameAndEditorID(ctx context.Cont
 // GetNewsletterByID fetches a newsletter by its ID.
 func (r *PostgresNewsletterRepo) GetNewsletterByID(ctx context.Context, newsletterID string) (*models.Newsletter, error) {
 	var nl dbNewsletter
-	err := r.db.QueryRow(ctx, getNewsletterByIDQuery, newsletterID).Scan(
+	err := r.db.QueryRowContext(ctx, getNewsletterByIDQuery, newsletterID).Scan(
 		&nl.ID, &nl.EditorID, &nl.Name, &nl.Description, &nl.CreatedAt, &nl.UpdatedAt,
 	)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("newsletter repo: GetNewsletterByID: %w", apperrors.ErrNewsletterNotFound)
 		}
 		return nil, fmt.Errorf("newsletter repo: GetNewsletterByID: scan: %w", err)
