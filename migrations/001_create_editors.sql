@@ -9,12 +9,7 @@ CREATE TABLE IF NOT EXISTS editors (
 
 -- Create trigger function to automatically update updated_at field
 CREATE OR REPLACE FUNCTION update_editors_updated_at()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = now();
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
+RETURNS TRIGGER AS $$ BEGIN NEW.updated_at = now(); RETURN NEW; END; $$ LANGUAGE plpgsql;
 
 -- Create trigger to call the function before each update
 CREATE TRIGGER trigger_editors_updated_at
@@ -25,4 +20,4 @@ CREATE TRIGGER trigger_editors_updated_at
 -- +goose Down
 DROP TRIGGER IF EXISTS trigger_editors_updated_at ON editors;
 DROP FUNCTION IF EXISTS update_editors_updated_at();
-DROP TABLE IF EXISTS editors; 
+DROP TABLE IF EXISTS editors;

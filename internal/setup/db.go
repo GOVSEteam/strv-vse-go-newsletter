@@ -2,40 +2,37 @@ package setup
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/lib/pq" // Import the pq driver for database/sql
 )
 
-// ConnectDB establishes a connection pool to the PostgreSQL database using pgx/v5.
-// It uses sensible defaults appropriate for a newsletter service.
-func ConnectDB(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
+// ConnectDB establishes a connection pool to the PostgreSQL database using database/sql.
+func ConnectDB(ctx context.Context, databaseURL string) (*sql.DB, error) {
 	if databaseURL == "" {
 		return nil, fmt.Errorf("database URL is required")
 	}
 
-	config, err := pgxpool.ParseConfig(databaseURL)
+	// sql.Open just validates its arguments, it does not create a connection.
+	// The connection pool is created lazily.
+	db, err := sql.Open("postgres", databaseURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse database URL: %w", err)
+		return nil, fmt.Errorf("failed to open database connection: %w", err)
 	}
 
-	// Set reasonable defaults for newsletter service
-	config.MaxConns = 25
-	config.MinConns = 5
-	config.MaxConnLifetime = time.Hour
-	config.MaxConnIdleTime = 30 * time.Minute
+	// Set reasonable defaults for the connection pool.
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(time.Hour)
+	db.SetConnMaxIdleTime(30 * time.Minute)
 
-	pool, err := pgxpool.NewWithConfig(ctx, config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create connection pool: %w", err)
-	}
-
-	// Simple connectivity test
-	if err := pool.Ping(ctx); err != nil {
-		pool.Close()
+	// Ping the database to verify the connection is alive.
+	if err := db.PingContext(ctx); err != nil {
+		db.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	return pool, nil
+	return db, nil
 }

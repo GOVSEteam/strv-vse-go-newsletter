@@ -8,13 +8,12 @@ import (
 	"strings"
 	"time"
 
+	"database/sql"
+
 	apperrors "github.com/GOVSEteam/strv-vse-go-newsletter/internal/errors"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models"
 	"github.com/google/uuid"
-	"github.com/jackc/pgerrcode"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/lib/pq"
 )
 
 //go:embed queries/post/create.sql
@@ -80,11 +79,11 @@ type PostRepository interface {
 }
 
 type postgresPostRepository struct {
-	db *pgxpool.Pool
+	db *sql.DB
 }
 
 // NewPostRepository creates a new instance of postgresPostRepository.
-func NewPostRepository(db *pgxpool.Pool) PostRepository {
+func NewPostRepository(db *sql.DB) PostRepository {
 	return &postgresPostRepository{db: db}
 }
 
@@ -101,7 +100,7 @@ func (r *postgresPostRepository) CreatePost(ctx context.Context, post *models.Po
 	}
 
 	var createdPostDB dbPost
-	err := r.db.QueryRow(ctx, createPostQuery,
+	err := r.db.QueryRowContext(ctx, createPostQuery,
 		post.ID, post.NewsletterID, post.Title, post.Content, post.PublishedAt, post.CreatedAt, post.UpdatedAt,
 	).Scan(
 		&createdPostDB.ID, &createdPostDB.NewsletterID, &createdPostDB.Title, &createdPostDB.Content,
@@ -109,11 +108,14 @@ func (r *postgresPostRepository) CreatePost(ctx context.Context, post *models.Po
 	)
 
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, fmt.Errorf("post repo: CreatePost: %w", apperrors.ErrConflict)
-		} else if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.ForeignKeyViolation {
-			return nil, fmt.Errorf("post repo: CreatePost: newsletter not found or invalid: %w", apperrors.ErrNotFound)
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) {
+			switch pqErr.Code {
+			case "23505": // unique_violation
+				return nil, fmt.Errorf("post repo: CreatePost: %w", apperrors.ErrConflict)
+			case "23503": // foreign_key_violation
+				return nil, fmt.Errorf("post repo: CreatePost: newsletter not found or invalid: %w", apperrors.ErrNotFound)
+			}
 		}
 		return nil, fmt.Errorf("post repo: CreatePost: scan: %w", err)
 	}
@@ -123,11 +125,11 @@ func (r *postgresPostRepository) CreatePost(ctx context.Context, post *models.Po
 
 func (r *postgresPostRepository) GetPostByID(ctx context.Context, postID string) (*models.Post, error) {
 	var p dbPost
-	err := r.db.QueryRow(ctx, getPostByIDQuery, postID).Scan(
+	err := r.db.QueryRowContext(ctx, getPostByIDQuery, postID).Scan(
 		&p.ID, &p.NewsletterID, &p.Title, &p.Content, &p.PublishedAt, &p.CreatedAt, &p.UpdatedAt,
 	)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("post repo: GetPostByID: %w", apperrors.ErrPostNotFound)
 		}
 		return nil, fmt.Errorf("post repo: GetPostByID: scan: %w", err)
@@ -137,7 +139,7 @@ func (r *postgresPostRepository) GetPostByID(ctx context.Context, postID string)
 }
 
 func (r *postgresPostRepository) ListPostsByNewsletterID(ctx context.Context, newsletterID string, limit int, offset int) ([]models.Post, int, error) {
-	rows, err := r.db.Query(ctx, listPostsByNewsletterIDQuery, newsletterID, limit, offset)
+	rows, err := r.db.QueryContext(ctx, listPostsByNewsletterIDQuery, newsletterID, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("post repo: ListPostsByNewsletterID: query: %w", err)
 	}
@@ -161,7 +163,7 @@ func (r *postgresPostRepository) ListPostsByNewsletterID(ctx context.Context, ne
 	}
 
 	var totalCount int
-	err = r.db.QueryRow(ctx, countPostsByNewsletterIDQuery, newsletterID).Scan(&totalCount)
+	err = r.db.QueryRowContext(ctx, countPostsByNewsletterIDQuery, newsletterID).Scan(&totalCount)
 	if err != nil {
 		return posts, 0, fmt.Errorf("post repo: ListPostsByNewsletterID: count query: %w", err)
 	}
@@ -212,20 +214,23 @@ func (r *postgresPostRepository) UpdatePost(ctx context.Context, postID string, 
 		strings.Join(setParts, ", "), argIndex)
 	
 	var updatedPostDB dbPost
-	err := r.db.QueryRow(ctx, query, args...).Scan(
+	err := r.db.QueryRowContext(ctx, query, args...).Scan(
 		&updatedPostDB.ID, &updatedPostDB.NewsletterID, &updatedPostDB.Title, &updatedPostDB.Content,
 		&updatedPostDB.PublishedAt, &updatedPostDB.CreatedAt, &updatedPostDB.UpdatedAt,
 	)
 
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("post repo: UpdatePost: %w", apperrors.ErrPostNotFound)
 		}
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, fmt.Errorf("post repo: UpdatePost: %w", apperrors.ErrConflict)
-		} else if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.ForeignKeyViolation {
-			return nil, fmt.Errorf("post repo: UpdatePost: newsletter not found or invalid: %w", apperrors.ErrNotFound)
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) {
+			switch pqErr.Code {
+			case "23505": // unique_violation
+				return nil, fmt.Errorf("post repo: UpdatePost: %w", apperrors.ErrConflict)
+			case "23503": // foreign_key_violation
+				return nil, fmt.Errorf("post repo: UpdatePost: newsletter not found or invalid: %w", apperrors.ErrNotFound)
+			}
 		}
 		return nil, fmt.Errorf("post repo: UpdatePost: scan: %w", err)
 	}
@@ -237,7 +242,7 @@ func (r *postgresPostRepository) SetPostPublished(ctx context.Context, postID st
 	updatedAt := time.Now().UTC()
 
 	var updatedPostDB dbPost
-	err := r.db.QueryRow(ctx, `
+	err := r.db.QueryRowContext(ctx, `
 		UPDATE posts 
 		SET published_at = $1, updated_at = $2 
 		WHERE id = $3 
@@ -249,7 +254,7 @@ func (r *postgresPostRepository) SetPostPublished(ctx context.Context, postID st
 	)
 
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("post repo: SetPostPublished: %w", apperrors.ErrPostNotFound)
 		}
 		return nil, fmt.Errorf("post repo: SetPostPublished: %w", err)
@@ -262,7 +267,7 @@ func (r *postgresPostRepository) SetPostUnpublished(ctx context.Context, postID 
 	updatedAt := time.Now().UTC()
 
 	var updatedPostDB dbPost
-	err := r.db.QueryRow(ctx, `
+	err := r.db.QueryRowContext(ctx, `
 		UPDATE posts 
 		SET published_at = NULL, updated_at = $1 
 		WHERE id = $2 
@@ -274,7 +279,7 @@ func (r *postgresPostRepository) SetPostUnpublished(ctx context.Context, postID 
 	)
 
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("post repo: SetPostUnpublished: %w", apperrors.ErrPostNotFound)
 		}
 		return nil, fmt.Errorf("post repo: SetPostUnpublished: %w", err)
@@ -284,13 +289,16 @@ func (r *postgresPostRepository) SetPostUnpublished(ctx context.Context, postID 
 }
 
 func (r *postgresPostRepository) DeletePost(ctx context.Context, postID string) error {
-	cmdTag, err := r.db.Exec(ctx, deletePostQuery, postID)
+	cmdTag, err := r.db.ExecContext(ctx, deletePostQuery, postID)
 	if err != nil {
 		return fmt.Errorf("post repo: DeletePost: exec: %w", err)
 	}
-	if cmdTag.RowsAffected() == 0 {
+	rowsAffected, err := cmdTag.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("post repo: DeletePost: checking rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
 		return fmt.Errorf("post repo: DeletePost: %w", apperrors.ErrPostNotFound)
 	}
 	return nil
 }
-
