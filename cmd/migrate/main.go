@@ -7,7 +7,7 @@ import (
 	"log"
 
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/config"
-	_ "github.com/jackc/pgx/v5/stdlib" // Register pgx driver for database/sql
+	_ "github.com/lib/pq" // Register pq driver for database/sql
 	"github.com/pressly/goose/v3"
 )
 
@@ -26,8 +26,8 @@ func main() {
 		log.Fatal("DATABASE_URL is required but not configured")
 	}
 
-	// Use pgx with database/sql compatibility
-	db, err := sql.Open("pgx", dbURL)
+	// Use pq with database/sql compatibility
+	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
@@ -68,4 +68,4 @@ func main() {
 	default:
 		log.Fatalf("Unknown command: %s", command)
 	}
-} 
+}

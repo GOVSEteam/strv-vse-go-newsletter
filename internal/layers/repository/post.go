@@ -13,8 +13,7 @@ import (
 	apperrors "github.com/GOVSEteam/strv-vse-go-newsletter/internal/errors"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models"
 	"github.com/google/uuid"
-	"github.com/jackc/pgerrcode"
-	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/lib/pq"
 )
 
 //go:embed queries/post/create.sql
@@ -109,11 +108,14 @@ func (r *postgresPostRepository) CreatePost(ctx context.Context, post *models.Po
 	)
 
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, fmt.Errorf("post repo: CreatePost: %w", apperrors.ErrConflict)
-		} else if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.ForeignKeyViolation {
-			return nil, fmt.Errorf("post repo: CreatePost: newsletter not found or invalid: %w", apperrors.ErrNotFound)
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) {
+			switch pqErr.Code {
+			case "23505": // unique_violation
+				return nil, fmt.Errorf("post repo: CreatePost: %w", apperrors.ErrConflict)
+			case "23503": // foreign_key_violation
+				return nil, fmt.Errorf("post repo: CreatePost: newsletter not found or invalid: %w", apperrors.ErrNotFound)
+			}
 		}
 		return nil, fmt.Errorf("post repo: CreatePost: scan: %w", err)
 	}
@@ -221,11 +223,14 @@ func (r *postgresPostRepository) UpdatePost(ctx context.Context, postID string, 
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("post repo: UpdatePost: %w", apperrors.ErrPostNotFound)
 		}
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
-			return nil, fmt.Errorf("post repo: UpdatePost: %w", apperrors.ErrConflict)
-		} else if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.ForeignKeyViolation {
-			return nil, fmt.Errorf("post repo: UpdatePost: newsletter not found or invalid: %w", apperrors.ErrNotFound)
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) {
+			switch pqErr.Code {
+			case "23505": // unique_violation
+				return nil, fmt.Errorf("post repo: UpdatePost: %w", apperrors.ErrConflict)
+			case "23503": // foreign_key_violation
+				return nil, fmt.Errorf("post repo: UpdatePost: newsletter not found or invalid: %w", apperrors.ErrNotFound)
+			}
 		}
 		return nil, fmt.Errorf("post repo: UpdatePost: scan: %w", err)
 	}

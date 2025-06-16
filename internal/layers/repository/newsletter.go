@@ -9,8 +9,7 @@ import (
 
 	"database/sql"
 
-	"github.com/jackc/pgerrcode" // For pg error codes
-	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/lib/pq"
 
 	apperrors "github.com/GOVSEteam/strv-vse-go-newsletter/internal/errors"
 	"github.com/GOVSEteam/strv-vse-go-newsletter/internal/models"
@@ -126,8 +125,8 @@ func (r *PostgresNewsletterRepo) CreateNewsletter(ctx context.Context, editorID,
 		&nl.ID, &nl.EditorID, &nl.Name, &nl.Description, &nl.CreatedAt, &nl.UpdatedAt,
 	)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23505" { // 23505 is unique_violation
 			return nil, fmt.Errorf("newsletter repo: CreateNewsletter: %w", apperrors.ErrConflict)
 		}
 		return nil, fmt.Errorf("newsletter repo: CreateNewsletter: scan: %w", err)
